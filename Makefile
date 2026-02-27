@@ -11,6 +11,7 @@ help:
 	@echo "  make migrations - Create new Django migration files"
 	@echo "  make migrate   - Run Django migrations"
 	@echo "  make collectstatic - Collect static files"
+	@echo "  make add-dep NAME=<package> - Install new Python package in container, then freeze"
 
 build:
 	docker-compose up --build
@@ -39,3 +40,9 @@ migrate:
 collectstatic:
 	docker-compose exec web python manage.py collectstatic --noinput
 
+add-dep:
+ifndef NAME
+	$(error NAME is undefined. Usage: make add-dep NAME=<package>)
+endif
+	docker-compose exec web pip install $(NAME)
+	docker-compose exec web pip freeze > requirements.txt
