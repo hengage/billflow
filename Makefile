@@ -1,4 +1,4 @@
-.PHONY: help build up down logs shell db-shell migrate migrations collectstatic create-app
+.PHONY: help build up down logs shell db-shell migrate migrations collectstatic create-app createsuperuser
 
 help:
 	@echo "Available commands:"
@@ -11,6 +11,7 @@ help:
 	@echo "  make migrations - Create new Django migration files"
 	@echo "  make migrate   - Run Django migrations"
 	@echo "  make collectstatic - Collect static files"
+	@echo "  make createsuperuser - Create Django superuser"
 	@echo "  make add-dep NAME=<package> - Install new Python package in container, then freeze"
 	@echo "  make create-app NAME=<app_name> - Create new Django app in apps directory"
 
@@ -40,6 +41,9 @@ migrate:
 
 collectstatic:
 	docker-compose exec web python manage.py collectstatic --noinput
+
+createsuperuser:
+	docker-compose exec web python manage.py createsuperuser
 
 add-dep:
 ifndef NAME
