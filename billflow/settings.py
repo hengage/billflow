@@ -37,6 +37,9 @@ ALLOWED_HOSTS = ['*']
 # Application definition
 
 INSTALLED_APPS = [
+     # Local apps
+    "users.apps.UsersConfig",
+    
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -144,3 +147,6 @@ CELERY_BROKER_URL = config("REDIS_URL")
 CELERY_RESULT_BACKEND = config("REDIS_URL")
 
 ASGI_APPLICATION = 'billflow.asgi.application'
+
+
+AUTH_USER_MODEL = 'users.User'
