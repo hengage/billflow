@@ -52,4 +52,4 @@ create-app:
 ifndef NAME
 	$(error NAME is undefined. Usage: make create-app NAME=<app_name>)
 endif
-	docker-compose exec web bash -c "mkdir -p apps/$(NAME) && touch apps/$(NAME)/__init__.py apps/$(NAME)/apps.py apps/$(NAME)/models.py apps/$(NAME)/serializers.py apps/$(NAME)/views.py apps/$(NAME)/urls.py apps/$(NAME)/permissions.py apps/$(NAME)/admin.py"
+	docker-compose exec web bash -c "mkdir -p apps/$(NAME) && touch apps/$(NAME)/__init__.py apps/$(NAME)/apps.py apps/$(NAME)/models.py apps/$(NAME)/serializers.py apps/$(NAME)/views.py apps/$(NAME)/urls.py apps/$(NAME)/permissions.py apps/$(NAME)/admin.py" apps/$(NAME)/migrations/__init__.py
