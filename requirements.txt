@@ -72,4 +72,5 @@ urllib3==2.6.3
 vine==5.1.0
 watchfiles==1.1.1
 wcwidth==0.6.0
+whitenoise==6.12.0
 zope.interface==8.2
