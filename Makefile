@@ -1,4 +1,4 @@
-.PHONY: help build up down logs shell db-shell migrate migrations collectstatic
+.PHONY: help build up down logs shell db-shell migrate migrations collectstatic create-app
 
 help:
 	@echo "Available commands:"
@@ -12,6 +12,7 @@ help:
 	@echo "  make migrate   - Run Django migrations"
 	@echo "  make collectstatic - Collect static files"
 	@echo "  make add-dep NAME=<package> - Install new Python package in container, then freeze"
+	@echo "  make create-app NAME=<app_name> - Create new Django app in apps directory"
 
 build:
 	docker-compose up --build
@@ -46,3 +47,9 @@ ifndef NAME
 endif
 	docker-compose exec web pip install $(NAME)
 	docker-compose exec web pip freeze > requirements.txt
+
+create-app:
+ifndef NAME
+	$(error NAME is undefined. Usage: make create-app NAME=<app_name>)
+endif
+	docker-compose exec web bash -c "mkdir -p apps/$(NAME) && touch apps/$(NAME)/__init__.py apps/$(NAME)/apps.py apps/$(NAME)/models.py apps/$(NAME)/serializers.py apps/$(NAME)/views.py apps/$(NAME)/urls.py apps/$(NAME)/permissions.py apps/$(NAME)/admin.py"
