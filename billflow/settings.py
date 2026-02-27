@@ -43,7 +43,8 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'django_celery_beat'
+    'django_celery_beat',
+    'channels',
 ]
 
 MIDDLEWARE = [
@@ -139,3 +140,5 @@ CACHES = {
 
 CELERY_BROKER_URL = config("REDIS_URL")
 CELERY_RESULT_BACKEND = config("REDIS_URL")
+
+ASGI_APPLICATION = 'billflow.asgi.application'
