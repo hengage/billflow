@@ -1,0 +1,17 @@
+django
+djangorestframework
+djangorestframework-simplejwt
+dj-rest-auth
+django-allauth
+channels
+channels-redis
+daphne
+celery
+django-celery-beat
+redis
+django-redis
+stripe
+requests
+drf-spectacular
+psycopg2-binary
+python-decouple

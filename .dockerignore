@@ -1,0 +1,45 @@
+# ---- Python ----
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.log
+
+# ---- Virtual Environments ----
+venv/
+env/
+.venv/
+
+# ---- Django ----
+*.sqlite3
+/media/
+staticfiles/
+*.mo
+*.pot
+
+# ---- Environment & Config ----
+.env
+.env.local
+.env.dev
+.env.prod
+*.secret
+*.key
+
+# ---- Docker ----
+docker-compose.override.yml
+Dockerfile.dev
+.docker/
+.dockerignore
+
+# ---- IDE / Editors ----
+.vscode/
+.idea/
+*.swp
+
+# ---- Git ----
+.git/
+.gitignore
+
+# ---- OS Files ----
+.DS_Store
+Thumbs.db
