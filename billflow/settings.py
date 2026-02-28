@@ -226,3 +226,7 @@ SOCIALACCOUNT_PROVIDERS = {
         'VERIFIED_EMAIL': True, # Only allow verified Google emails
     }
 }
+
+PASSWORD_RESET_CONFIRM_URL = config('PASSWORD_RESET_CONFIRM_URL')
+
+EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
