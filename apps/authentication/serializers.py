@@ -1,6 +1,7 @@
 from rest_framework import serializers
 from django.contrib.auth import authenticate
 from django.contrib.auth.password_validation import validate_password
+from dj_rest_auth.serializers import PasswordResetConfirmSerializer
 from users.models import User
 
 class UserProfileSerializer(serializers.ModelSerializer):
@@ -68,3 +69,29 @@ class RegisterSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         return User.objects.create_user(**validated_data)
+
+
+class CustomPasswordResetConfirmSerializer(PasswordResetConfirmSerializer):
+    new_password = serializers.CharField(write_only=True, required=True)
+    
+    # explicitly remove the dj-rest-auth fields
+    new_password1 = None
+    new_password2 = None
+
+   
+    def validate(self, attrs):
+        # dj-rest-auth's validate() needs new_password1 and new_password2 to set self.user
+        # Inject new_password as both so the parent can do its uid/token validation
+        # without having to rewrite the logic
+        attrs['new_password1'] = attrs['new_password']
+        attrs['new_password2'] = attrs['new_password']
+        super().validate(attrs)
+
+        # Now run our own password validation
+        validate_password(attrs['new_password'])
+        return attrs
+
+    def save(self):
+        self.user.set_password(self.validated_data['new_password'])
+        self.user.save()
+        return self.user

@@ -211,6 +211,7 @@ REST_AUTH = {
     'USE_JWT': True, # Use JWT instead of token auth
     'JWT_AUTH_HTTPONLY': False,  # send refresh token in response body, not httponly cookie
     'TOKEN_MODEL': None,  # disable DRF's default token model since we're using JWT
+    'PASSWORD_RESET_CONFIRM_SERIALIZER': 'authentication.serializers.CustomPasswordResetConfirmSerializer',
 }
 
 # allauth social account config
