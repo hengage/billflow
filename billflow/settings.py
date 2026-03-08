@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 
 from pathlib import Path
 import sys
+from datetime import timedelta
 from utils.paths import get_project_root, get_apps_dir
 from decouple import config
 from .logging import LOGGING
@@ -39,15 +40,29 @@ ALLOWED_HOSTS = ['*']
 INSTALLED_APPS = [
      # Local apps
     "users.apps.UsersConfig",
-    
+    "authentication.apps.AuthenticationConfig",
+   
+    # Django core apps
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'django.contrib.sites',
+
+    # Third party apps
     'django_celery_beat',
     'channels',
+    'rest_framework',
+    'rest_framework.authtoken',
+    'rest_framework_simplejwt.token_blacklist',
+    'allauth',
+    'allauth.account',
+    'allauth.socialaccount',
+    'allauth.socialaccount.providers.google',
+    'dj_rest_auth',
+    'dj_rest_auth.registration',
 ]
 
 MIDDLEWARE = [
@@ -59,6 +74,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'allauth.account.middleware.AccountMiddleware',
 ]
 
 ROOT_URLCONF = 'billflow.urls'
@@ -135,6 +151,35 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+# Django REST Framework
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    ),
+    'DEFAULT_PERMISSION_CLASSES': (
+        'rest_framework.permissions.IsAuthenticated',
+    ),
+    'DEFAULT_THROTTLE_CLASSES': [
+        'rest_framework.throttling.AnonRateThrottle',
+        'rest_framework.throttling.UserRateThrottle',
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        'anon': '100/day',
+        'user': '1000/day',
+    },
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+}
+
+# SimpleJWT
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=5),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
+    'ROTATE_REFRESH_TOKENS': True,
+    'BLACKLIST_AFTER_ROTATION': True,
+    'AUTH_HEADER_TYPES': ('Bearer',),
+    'AUTH_TOKEN_CLASSES': ('rest_framework_simplejwt.tokens.AccessToken',),
+}
+
 CACHES = {
     "default": {
         "BACKEND": "django_redis.cache.RedisCache",
@@ -150,3 +195,39 @@ ASGI_APPLICATION = 'billflow.asgi.application'
 
 
 AUTH_USER_MODEL = 'users.User'
+
+# allauth needs this to know which site it's running on
+# SITE_ID=1 is the default site created by Django's sites framework
+SITE_ID = 1
+
+# Tell allauth to use email as the primary identifier, not username
+ACCOUNT_USER_MODEL_USERNAME_FIELD = None
+ACCOUNT_EMAIL_REQUIRED = True
+ACCOUNT_USERNAME_REQUIRED = False
+ACCOUNT_AUTHENTICATION_METHOD = 'email'
+
+# dj-rest-auth config
+REST_AUTH = {
+    'USE_JWT': True, # Use JWT instead of token auth
+    'JWT_AUTH_HTTPONLY': False,  # send refresh token in response body, not httponly cookie
+    'TOKEN_MODEL': None,  # disable DRF's default token model since we're using JWT
+    'PASSWORD_RESET_CONFIRM_SERIALIZER': 'authentication.serializers.CustomPasswordResetConfirmSerializer',
+}
+
+# allauth social account config
+SOCIALACCOUNT_PROVIDERS = {
+    'google': {
+        'APP': {
+            'client_id': config('GOOGLE_CLIENT_ID'),
+            'secret': config('GOOGLE_CLIENT_SECRET'),
+            'key': '',
+        },
+        'SCOPE': ['profile', 'email'],
+        'AUTH_PARAMS': {'access_type': 'online'},
+        'VERIFIED_EMAIL': True, # Only allow verified Google emails
+    }
+}
+
+PASSWORD_RESET_CONFIRM_URL = config('PASSWORD_RESET_CONFIRM_URL')
+
+EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
