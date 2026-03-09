@@ -166,3 +166,6 @@ cython_debug/
 # Static files
 staticfiles/
 .idea/
+
+windsurfrules
+BILLFLOW_SPEC.md
