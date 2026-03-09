@@ -28,7 +28,19 @@ NOTIFICATION_TYPE_GROUP_MAP = {
 }
 
 DEFAULT_NOTIFICATION_PREFERENCES = {
-    NotificationGroup.PAYMENTS: {'email': True, 'push': True},
-    NotificationGroup.SUBSCRIPTIONS: {'email': True, 'push': True},
-    NotificationGroup.WALLET: {'email': True, 'push': True},
+    NotificationGroup.PAYMENTS: {
+        'description': 'Notifications for payment success and failure events.',
+        'email': True,
+        'push': True,
+    },
+    NotificationGroup.SUBSCRIPTIONS: {
+        'description': 'Notifications for subscription activation, expiry warnings, and expired subscriptions.',
+        'email': True,
+        'push': True,
+    },
+    NotificationGroup.WALLET: {
+        'description': 'Notifications for wallet top-ups.',
+        'email': True,
+        'push': True,
+    },
 }

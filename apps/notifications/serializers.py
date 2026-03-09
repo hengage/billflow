@@ -9,6 +9,7 @@ class NotificationGroupPreferenceSerializer(serializers.Serializer):
     e.g. {"email": true, "push": false}
     Used as a nested serializer inside NotificationPreferencesSerializer.
     """
+    description = serializers.CharField(read_only=True)
     email = serializers.BooleanField()
     push = serializers.BooleanField()
 
