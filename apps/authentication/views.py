@@ -10,6 +10,7 @@ from allauth.socialaccount.providers.oauth2.client import OAuth2Client
 from dj_rest_auth.registration.views import SocialLoginView
 
 from .serializers import RegisterSerializer, LoginSerializer, UserProfileSerializer
+from api_response.helpers import created, fail, success
 
 
 class GoogleLogin(SocialLoginView):
@@ -24,18 +25,21 @@ class RegisterView(APIView):
 
     def post(self, request):
         serializer = RegisterSerializer(data=request.data)
+        print(serializer.is_valid())
+        print(serializer.errors)
 
         if serializer.is_valid():
             user = serializer.save()
-            return Response(
-                {
-                    'message': 'Account created successfully.',
-                    'user': UserProfileSerializer(user).data,
-                },
-                status=status.HTTP_201_CREATED
+            return created(
+                data={'user': UserProfileSerializer(user).data},
+                message='Account created successfully.'
             )
 
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        return fail(
+            message='Validation failed',
+            error=serializer.errors,
+            status_code=status.HTTP_400_BAD_REQUEST
+        )
 
 
 class LoginView(APIView):
@@ -51,16 +55,20 @@ class LoginView(APIView):
             user = serializer.validated_data['user']
             refresh = RefreshToken.for_user(user)
 
-            return Response(
-                {
+            return success(
+                data={
                     'access': str(refresh.access_token),
                     'refresh': str(refresh),
                     'user': UserProfileSerializer(user).data,
                 },
-                status=status.HTTP_200_OK
+                message='Login successful'
             )
 
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        return fail(
+            message='Invalid credentials',
+            error=serializer.errors,
+            status_code=status.HTTP_400_BAD_REQUEST
+        )
 
 
 class LogoutView(APIView):
@@ -70,24 +78,25 @@ class LogoutView(APIView):
         refresh_token = request.data.get('refresh')
 
         if not refresh_token:
-            return Response(
-                {'error': 'Refresh token is required.'},
-                status=status.HTTP_400_BAD_REQUEST
+            return fail(
+                message='Refresh token is required.',
+                error={'refresh': 'This field is required.'},
+                status_code=status.HTTP_400_BAD_REQUEST
             )
 
         try:
-            # This adds the token to the OutstandingToken blacklist
+            # This adds to token to the OutstandingToken blacklist
             # Any future attempt to use it will be rejected by simplejwt
             token = RefreshToken(refresh_token)
             token.blacklist()
-            return Response(
-                {'message': 'Logged out successfully.'},
-                status=status.HTTP_200_OK
+            return success(
+                message='Logged out successfully.'
             )
         except TokenError:
-            return Response(
-                {'error': 'Invalid or expired token.'},
-                status=status.HTTP_400_BAD_REQUEST
+            return fail(
+                message='Invalid or expired token.',
+                error={'token': 'Invalid or expired refresh token.'},
+                status_code=status.HTTP_400_BAD_REQUEST
             )
 
 
@@ -96,7 +105,7 @@ class UserProfileView(APIView):
 
     def get(self, request):
         serializer = UserProfileSerializer(request.user)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        return success(data=serializer.data)
 
     def patch(self, request):
         serializer = UserProfileSerializer(
@@ -107,6 +116,10 @@ class UserProfileView(APIView):
 
         if serializer.is_valid():
             serializer.save()
-            return Response(serializer.data, status=status.HTTP_200_OK)
+            return success(data=serializer.data, message='Profile updated successfully.')
 
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        return fail(
+            message='Validation failed',
+            error=serializer.errors,
+            status_code=status.HTTP_400_BAD_REQUEST
+        )
