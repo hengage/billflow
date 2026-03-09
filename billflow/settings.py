@@ -168,6 +168,7 @@ REST_FRAMEWORK = {
         'user': '1000/day',
     },
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+    'EXCEPTION_HANDLER': 'api_response.exceptions.custom_exception_handler',
 }
 
 # SimpleJWT

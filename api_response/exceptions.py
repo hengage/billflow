@@ -1,0 +1,45 @@
+from rest_framework.views import exception_handler
+from rest_framework.response import Response
+from rest_framework.exceptions import APIException
+
+"""Custom API exceptions and exception handler.
+
+DRF Exceptions API reference:
+https://www.django-rest-framework.org/api-guide/exceptions
+"""
+
+
+class ThirdPartyServiceError(APIException):
+    """Use when an upstream/third-party dependency is unavailable.
+
+    Intended for cases like Stripe downtime/timeouts or any external API failure
+    where the client should retry later.
+
+    DRF reference:
+    https://www.django-rest-framework.org/api-guide/exceptions/#api-reference
+    """
+    status_code = 503
+    default_detail = 'Service temporarily unavailable, try again later.'
+    default_code = 'third_party_service_unavailable'
+
+def custom_exception_handler(exc, context):
+    """Wrap DRF exception responses in the project's standard response envelope."""
+    response = exception_handler(exc, context)
+
+    if response is not None:
+        data = response.data
+        request = context.get("request")
+        payload = {
+            "status": False,
+            "data": None,
+            "url": request.path if request else None,
+            "error": data,
+        }
+
+        # Include top-level messages if provided
+        if isinstance(data, dict) and "detail" in data:
+            payload["message"] = data["detail"]
+
+        return Response(payload, status=response.status_code)
+
+    return response
