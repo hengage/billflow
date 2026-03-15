@@ -1,5 +1,6 @@
 from django.db import models
 
+
 class NotificationType(models.TextChoices):
     PAYMENT_SUCCESS = 'payment_success', 'Payment Success'
     PAYMENT_FAILED = 'payment_failed', 'Payment Failed'
@@ -8,16 +9,20 @@ class NotificationType(models.TextChoices):
     SUBSCRIPTION_EXPIRED = 'subscription_expired', 'Subscription Expired'
     SUBSCRIPTION_ACTIVATED = 'subscription_activated', 'Subscription Activated'
 
+
 class NotificationChannel(models.TextChoices):
     EMAIL = 'email', 'Email'
     PUSH = 'push', 'Push'
+
 
 class NotificationGroup:
     PAYMENTS = 'payments'
     SUBSCRIPTIONS = 'subscriptions'
     WALLET = 'wallet'
 
-# Maps each notification type to its group
+
+# Maps each notification type to its preference group.
+# Used in NotificationService to look up which group's preferences to check.
 NOTIFICATION_TYPE_GROUP_MAP = {
     NotificationType.PAYMENT_SUCCESS: NotificationGroup.PAYMENTS,
     NotificationType.PAYMENT_FAILED: NotificationGroup.PAYMENTS,
@@ -27,20 +32,11 @@ NOTIFICATION_TYPE_GROUP_MAP = {
     NotificationType.SUBSCRIPTION_ACTIVATED: NotificationGroup.SUBSCRIPTIONS,
 }
 
-DEFAULT_NOTIFICATION_PREFERENCES = {
-    NotificationGroup.PAYMENTS: {
-        'description': 'Notifications for payment success and failure events.',
-        'email': True,
-        'push': True,
-    },
-    NotificationGroup.SUBSCRIPTIONS: {
-        'description': 'Notifications for subscription activation, expiry warnings, and expired subscriptions.',
-        'email': True,
-        'push': True,
-    },
-    NotificationGroup.WALLET: {
-        'description': 'Notifications for wallet top-ups.',
-        'email': True,
-        'push': True,
-    },
+# Descriptions are static metadata — they describe what each group covers.
+# They are never stored in the database. The API merges these with the database
+# values at read time so the frontend always knows what each group means.
+NOTIFICATION_GROUP_DESCRIPTIONS = {
+    NotificationGroup.PAYMENTS: 'Notifications for payment success and payment failure events.',
+    NotificationGroup.SUBSCRIPTIONS: 'Notifications for subscription activation, expiry warnings, and expired subscriptions.',
+    NotificationGroup.WALLET: 'Notifications for wallet top-up events.',
 }

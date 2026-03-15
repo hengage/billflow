@@ -3,7 +3,6 @@ from django.contrib.auth import authenticate
 from django.contrib.auth.password_validation import validate_password
 from dj_rest_auth.serializers import PasswordResetConfirmSerializer
 from users.models import User
-from notifications.constants import DEFAULT_NOTIFICATION_PREFERENCES
 
 class UserProfileSerializer(serializers.ModelSerializer):
     """
@@ -69,8 +68,6 @@ class RegisterSerializer(serializers.ModelSerializer):
         return value
 
     def create(self, validated_data):
-        # Pre-populate notification preferences with defaults
-        validated_data['notification_preferences'] = DEFAULT_NOTIFICATION_PREFERENCES
         return User.objects.create_user(**validated_data)
 
 
