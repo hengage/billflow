@@ -1,6 +1,16 @@
 from rest_framework.response import Response
 
 
+def build_envelope(*, data=None, message="", error=None, url=None):
+    return {
+        "status": error is None,
+        "message": message,
+        "data": data if error is None else None,
+        "error": error,
+        "url": url,
+    }
+
+
 class APIResponse(Response):
     def __init__(
         self,
@@ -10,13 +20,7 @@ class APIResponse(Response):
         status=200,
         headers=None
     ):
-        body = {
-            "status": error is None,
-            "message": message,
-            "data": data if error is None else None,
-            "error": error,
-            "url": None,
-        }
+        body = build_envelope(data=data, message=message, error=error, url=None)
 
         super().__init__(body, status=status, headers=headers)
 
