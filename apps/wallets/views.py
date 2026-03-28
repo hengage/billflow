@@ -5,8 +5,10 @@ from api_response.helpers import success, fail
 from .serializers import WalletSerializer, WalletTransactionSerializer, TopUpSerializer
 from .service import WalletService
 from .constants import WALLET_BALANCE_CACHE_KEY_PREFIX
+from .api_schema import wallet_balance_schema, wallet_topup_schema, wallet_transactions_schema
 
 
+@wallet_balance_schema
 class WalletView(APIView):
     """
     GET /api/wallet/ — returns current wallet balance.
@@ -31,6 +33,7 @@ class WalletView(APIView):
         return success(data=data, message='Wallet balance retrieved.')
 
 
+@wallet_topup_schema
 class WalletTopUpView(APIView):
     """
     POST /api/wallet/topup/ — initiates a wallet top-up.
@@ -69,6 +72,7 @@ class WalletTopUpView(APIView):
         return fail(message='Validation failed.', error=serializer.errors)
 
 
+@wallet_transactions_schema
 class WalletTransactionListView(APIView):
     """
     GET /api/wallet/transactions/ — lists wallet transaction history.
