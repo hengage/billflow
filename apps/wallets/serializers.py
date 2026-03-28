@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from .models import Wallet, WalletTransaction
+from utils.messages import WALLET_MESSAGES
 
 
 class WalletSerializer(serializers.ModelSerializer):
@@ -27,14 +28,10 @@ class TopUpSerializer(serializers.Serializer):
         decimal_places=2,
         min_value=100,
         max_value=1000000,
+        error_messages={
+            'max_value': WALLET_MESSAGES['TOPUP_MAX_LIMIT'],
+            'max_digits': WALLET_MESSAGES['TOPUP_MAX_LIMIT'],
+            'min_value': WALLET_MESSAGES['TOPUP_MIN_LIMIT'],
+        }
     )
     provider = serializers.ChoiceField(choices=['paystack', 'stripe'])
-
-    def validate_amount(self, value):
-        # Ensure amount has at most 2 decimal places
-        # DecimalField handles this but explicit validation gives a cleaner error
-        if round(value, 2) != value:
-            raise serializers.ValidationError(
-                'Amount must have at most 2 decimal places.'
-            )
-        return value
