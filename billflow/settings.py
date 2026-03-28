@@ -30,7 +30,7 @@ sys.path.insert(0, str(get_apps_dir()))
 SECRET_KEY = config('SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = False
 
 ALLOWED_HOSTS = ['*']
 
@@ -64,6 +64,7 @@ INSTALLED_APPS = [
     'allauth.socialaccount.providers.google',
     'dj_rest_auth',
     'dj_rest_auth.registration',
+    'drf_spectacular',
 ]
 
 MIDDLEWARE = [
@@ -233,3 +234,29 @@ SOCIALACCOUNT_PROVIDERS = {
 PASSWORD_RESET_CONFIRM_URL = config('PASSWORD_RESET_CONFIRM_URL')
 
 EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+
+# billflow/settings.py
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'BillFlow API',
+    'DESCRIPTION': (
+        'A multi-tenant bill payment, wallet and subscription API. '
+        'Built with Django REST Framework, Paystack, Stripe, and Django Channels.'
+    ),
+    'VERSION': '1.0.0',
+    'CONTACT': {
+        'name': 'GitHub Repository',
+        'url': 'https://github.com/hengage/billflow',
+    },
+    'SERVE_INCLUDE_SCHEMA': False,  # hides the raw schema endpoint from the Swagger UI itself
+    # JWT auth button in Swagger UI — lets you paste a token and authenticate
+    'SECURITY': [{'BearerAuth': []}],
+    'COMPONENTS': {
+        'securitySchemes': {
+            'BearerAuth': {
+                'type': 'http',
+                'scheme': 'bearer',
+                'bearerFormat': 'JWT',
+            }
+        }
+    },
+}

@@ -11,14 +11,21 @@ from dj_rest_auth.registration.views import SocialLoginView
 
 from .serializers import RegisterSerializer, LoginSerializer, UserProfileSerializer
 from api_response.helpers import created, fail, success
+from .api_schema import (
+    register_schema,
+    login_schema,
+    logout_schema,
+    profile_schema,
+    google_login_schema,
+)
 
-
+@google_login_schema
 class GoogleLogin(SocialLoginView):
     adapter_class = GoogleOAuth2Adapter
     callback_url = 'http://localhost:3000/auth/google/callback'
     client_class = OAuth2Client
 
-
+@register_schema
 class RegisterView(APIView):
     # Override the global DEFAULT_PERMISSION_CLASSES which requires authentication
     permission_classes = (AllowAny,)
@@ -42,6 +49,7 @@ class RegisterView(APIView):
         )
 
 
+@login_schema
 class LoginView(APIView):
     permission_classes = (AllowAny,)
 
@@ -71,6 +79,7 @@ class LoginView(APIView):
         )
 
 
+@logout_schema
 class LogoutView(APIView):
     permission_classes = (IsAuthenticated,)
 
@@ -100,6 +109,7 @@ class LogoutView(APIView):
             )
 
 
+@profile_schema
 class UserProfileView(APIView):
     permission_classes = (IsAuthenticated,)
 

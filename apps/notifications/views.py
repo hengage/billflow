@@ -6,8 +6,10 @@ from .serializers import (
     NotificationPreferencesSerializer,
     NotificationSerializer,
 )
+from notifications.api_schema import notification_preferences_schema, push_notification_list_schema
 
 
+@notification_preferences_schema
 class NotificationPreferencesView(APIView):
     permission_classes = (IsAuthenticated,)
 
@@ -33,7 +35,7 @@ class NotificationPreferencesView(APIView):
 
         return fail(message='Validation failed.', error=serializer.errors)
 
-
+@push_notification_list_schema
 class PushNotificationListView(APIView):
     permission_classes = (IsAuthenticated,)
 
