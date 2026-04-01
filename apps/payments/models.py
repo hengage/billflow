@@ -99,6 +99,11 @@ class Payment(models.Model):
         related_name="payment"
     )
     
+    # Provider transaction details
+    reference = models.CharField(max_length=255, blank=True)  # provider's transaction ID
+    last_four = models.CharField(max_length=4, blank=True)    # PCI DSS — store only this
+    card_brand = models.CharField(max_length=20, blank=True)  # visa, mastercard etc.
+    
     metadata = models.JSONField(default=dict, blank=True)
     
     created_at = models.DateTimeField(auto_now_add=True)
@@ -106,3 +111,25 @@ class Payment(models.Model):
 
     def __str__(self):
         return f"{self.user.email} - {self.amount} - {self.purpose} - {self.status}"
+
+
+class WebhookLog(models.Model):
+    """
+    Immutable audit trail of every incoming webhook event.
+
+    Written BEFORE any processing — if processing fails, the raw payload
+    is here to inspect, debug, and replay. The processed flag tells us
+    which events were handled successfully and which need attention.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    provider = models.CharField(max_length=20, choices=PaymentProvider.choices)
+    event_type = models.CharField(max_length=100)
+    payload = models.JSONField()
+    received_at = models.DateTimeField(auto_now_add=True)
+    processed = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ['-received_at']
+
+    def __str__(self):
+        return f'{self.provider} | {self.event_type} | processed={self.processed}'

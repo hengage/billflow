@@ -29,3 +29,27 @@ class IdempotencyRecoveryPoint(models.TextChoices):
 class Currency(models.TextChoices):
     NGN = 'NGN', _('Nigerian Naira')
     USD = 'USD', _('US Dollar')
+
+
+class PaystackEvent:
+    """
+    Paystack webhook event type constants.
+    Reference: https://paystack.com/docs/payments/webhooks/#supported-events
+    """
+    CHARGE_SUCCESS = 'charge.success'
+    CHARGE_FAILED = 'charge.failed'
+
+
+class StripeEvent:
+    """
+    Stripe webhook event type constants.
+    Reference: https://stripe.com/docs/api/events/types
+    """
+    PAYMENT_INTENT_SUCCEEDED = 'payment_intent.succeeded'
+    PAYMENT_INTENT_FAILED = 'payment_intent.payment_failed'
+
+
+# HTTP status codes that Paystack returns for permanent rejections.
+# These indicate a non-retryable failure — the provider rejected the
+# request for a business reason that won't change on retry.
+PAYSTACK_NON_RETRYABLE_STATUS_CODES = {400, 422}
