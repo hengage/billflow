@@ -262,3 +262,7 @@ SPECTACULAR_SETTINGS = {
         }
     },
 }
+
+# Payment Provider API Keys
+PAYSTACK_SECRET_KEY = config('PAYSTACK_SECRET_KEY')
+STRIPE_SECRET_KEY = config('STRIPE_SECRET_KEY')
