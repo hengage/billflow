@@ -210,6 +210,13 @@ CELERY_TASK_ROUTES = {
 CELERY_TASK_ACKS_LATE = True
 CELERY_TASK_REJECT_ON_WORKER_LOST = True
 
+CELERY_BEAT_SCHEDULE = {
+    'reconcile-unprocessed-webhooks': {
+        'task': 'payments.tasks.reconcile_unprocessed_webhooks',
+        'schedule': 600,  # every 10 minutes
+    },
+}
+
 ASGI_APPLICATION = 'billflow.asgi.application'
 
 

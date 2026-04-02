@@ -59,6 +59,37 @@ def process_webhook_event(self, webhook_log_id, provider):
         raise self.retry(exc=exc, countdown=delay)
 
 
+@shared_task
+def reconcile_unprocessed_webhooks():
+    """
+    Finds WebhookLog records that were never processed and requeues them.
+    
+    This is the safety net for the gap between WebhookLog being committed
+    and the Celery task being durably picked up by a worker. It runs every
+    10 minutes via Celery Beat and handles any logs that fell through.
+
+    Reference: https://brandur.org/job-drain
+    """
+    from django.utils import timezone
+    from datetime import timedelta
+    from payments.models import WebhookLog
+
+    threshold = timezone.now() - timedelta(minutes=10)
+    stuck_logs = WebhookLog.objects.filter(
+        processed=False,
+        received_at__lt=threshold,
+    )
+
+    for log in stuck_logs:
+        process_webhook_event.delay(
+            webhook_log_id=str(log.id),
+            provider=log.provider,
+        )
+        logger.info(
+            f'Requeued stuck webhook | log={log.id} | '
+            f'provider={log.provider} | event={log.event_type}'
+        )
+
 @shared_task(
     bind=True,
     max_retries=MAX_RETRIES,

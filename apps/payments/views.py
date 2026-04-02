@@ -103,8 +103,6 @@ class PaystackWebhookView(APIView):
     permission_classes = (AllowAny,)
 
     def post(self, request):
-        # Step 1 — Verify the signature before touching anything.
-        # If this fails, reject immediately — don't log, don't process.
         signature = request.headers.get('X-Paystack-Signature', '')
         if not PaystackProvider.verify_signature(request.body, signature):
             logger.warning(
@@ -119,7 +117,6 @@ class PaystackWebhookView(APIView):
         payload = request.data
         event_type = payload.get('event', '')
 
-        # Step 2 — Write the raw payload to WebhookLog before any processing.
         # This is our audit trail and replay mechanism. If processing fails,
         # the event is here to inspect and manually trigger again.
         webhook_log = WebhookLog.objects.create(
@@ -128,9 +125,6 @@ class PaystackWebhookView(APIView):
             payload=payload,
         )
 
-        # Step 3 — Queue the processing task and return 200 immediately.
-        # Paystack gets its response within milliseconds of the event arriving.
-        # The Celery worker handles all the actual work asynchronously.
         transaction.on_commit(
             lambda: process_webhook_event.delay(
                 webhook_log_id=str(webhook_log.id),
@@ -145,10 +139,6 @@ class PaystackWebhookView(APIView):
 class StripeWebhookView(APIView):
     """
     POST /api/payments/stripe/webhook/
-
-    Same protocol as PaystackWebhookView — verify, log, queue, return 200.
-    The difference is in signature verification: Stripe's SDK handles this
-    via construct_event() rather than billflow computing the HMAC.
     """
     permission_classes = (AllowAny,)
 
