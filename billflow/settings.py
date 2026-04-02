@@ -195,6 +195,20 @@ CACHES = {
 
 CELERY_BROKER_URL = config("REDIS_URL")
 CELERY_RESULT_BACKEND = config("REDIS_URL")
+CELERY_TASK_QUEUES_DEFAULT = 'default'
+
+CELERY_TASK_ROUTES = {
+    'payments.tasks.process_webhook_event': {'queue': 'webhooks'},
+    'payments.tasks.send_payment_success_notification': {'queue': 'notifications'},
+    'payments.tasks.send_payment_failed_notification': {'queue': 'notifications'},
+    'notifications.tasks.send_email_task': {'queue': 'notifications'},
+}
+
+# task message is only removed from the queue after
+# the task completes. If the worker crashes mid-task, the message goes back
+# to the queue and another worker picks it up
+CELERY_TASK_ACKS_LATE = True
+CELERY_TASK_REJECT_ON_WORKER_LOST = True
 
 ASGI_APPLICATION = 'billflow.asgi.application'
 

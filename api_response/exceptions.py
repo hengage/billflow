@@ -37,6 +37,16 @@ class NonRetryableProviderError(APIException):
     default_code = 'payment_rejected'
 
 
+class ConflictError(APIException):
+    """
+    Raised when a request conflicts with another in-flight request.
+    The client should back off and retry after a short delay.
+    """
+    status_code = 409
+    default_detail = 'This request is currently being processed.'
+    default_code = 'conflict'
+
+
 def custom_exception_handler(exc, context):
     """Wrap DRF exception responses in the project's standard response envelope."""
     response = exception_handler(exc, context)

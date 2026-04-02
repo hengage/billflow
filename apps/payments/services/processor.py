@@ -6,7 +6,7 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.exceptions import ValidationError
 
-from api_response.exceptions import ThirdPartyServiceError, NonRetryableProviderError
+from api_response.exceptions import ThirdPartyServiceError, NonRetryableProviderError, ConflictError
 from payments.models import IdempotencyKey, Payment
 from payments.constants import IdempotencyRecoveryPoint, PaymentProvider
 
@@ -17,16 +17,6 @@ logger = logging.getLogger(__name__)
 # is exceeded. 60 seconds gives a generous buffer beyond typical provider
 # response times while still recovering promptly from crashes.
 STALE_LOCK_SECONDS = 60
-
-
-class ConflictError(Exception):
-    """
-    Raised when a recent, valid lock exists on the idempotency key —
-    meaning another worker is actively processing the same request.
-    The client should back off and retry after a short delay.
-    This is distinct from a validation error or a provider failure.
-    """
-    pass
 
 
 class PaymentProcessor:
@@ -131,7 +121,7 @@ class PaymentProcessor:
         return self._finalise(
             idem_key=idem_key,
             response_body=provider_data,
-            response_code=status.HTTP_201_CREATED,
+            response_code=status.HTTP_200_OK,
         )
 
     def _acquire_key(self):

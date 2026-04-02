@@ -37,7 +37,6 @@ class PaystackEvent:
     Reference: https://paystack.com/docs/payments/webhooks/#supported-events
     """
     CHARGE_SUCCESS = 'charge.success'
-    CHARGE_FAILED = 'charge.failed'
 
 
 class StripeEvent:
