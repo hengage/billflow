@@ -31,10 +31,6 @@ class InitiatePaymentView(APIView):
 
     Validates the request, instantiates the PaymentProcessor, and delegates
     the entire payment initiation lifecycle to it.
-
-    The client must supply an X-Idempotency-Key header containing a UUID
-    they generated. If they retry after a network failure, they use the
-    same key and get back the same response without a double charge.
     """
     permission_classes = (IsAuthenticated,)
 
