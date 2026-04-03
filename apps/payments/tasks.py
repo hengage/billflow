@@ -1,6 +1,6 @@
 import logging
 import random
-from celery import shared_task
+from celery import shared_task, Task
 from django.contrib.auth import get_user_model
 
 logger = logging.getLogger(__name__)
@@ -26,9 +26,49 @@ def _backoff_with_jitter(retry_number):
     capped = min(MAX_DELAY, exponential)
     return random.uniform(0, capped)
 
+class WebhookTaskBase(Task):
+    """
+    Custom base class for webhook processing tasks.
+    Provides the on_failure hook that runs when max_retries is exhausted.
+    """
+    abstract = True
+
+    def on_failure(self, exc, task_id, args, kwargs, einfo):
+        """
+        Called by Celery automatically after the final retry is exhausted.
+        This is the DLQ handler — it marks the webhook as permanently failed
+        so the reconciliation job stops requeuing it, and logs a critical
+        alert for investigation.
+        """
+        from payments.models import WebhookLog
+
+        log_id = kwargs.get('webhook_log_id') or (args[0] if args else None)
+
+        if log_id:
+            try:
+                WebhookLog.objects.filter(id=log_id).update(
+                    permanently_failed=True,
+                    failure_reason=(
+                        f'Exhausted {self.max_retries} retries. '
+                        f'Final error: {str(exc)}\n'
+                        f'Traceback:\n{str(einfo)}'
+                    ),
+                )
+            except Exception as update_exc:
+                logger.error(
+                    f'Failed to mark webhook as permanently failed | '
+                    f'log={log_id} | error={str(update_exc)}'
+                )
+
+        logger.critical(
+            f'WEBHOOK PERMANENTLY FAILED — requires manual review | '
+            f'log_id={log_id} | task_id={task_id} | error={str(exc)}'
+        )
+        # TODO: Fire alert to Slack/PagerDuty here when alerting is configured.
 
 @shared_task(
     bind=True,
+    base=WebhookTaskBase,
     max_retries=MAX_RETRIES,
     queue='webhooks',
     acks_late=True,           # don't acknowledge the task until it completes —
@@ -77,6 +117,7 @@ def reconcile_unprocessed_webhooks():
     threshold = timezone.now() - timedelta(minutes=10)
     stuck_logs = WebhookLog.objects.filter(
         processed=False,
+        permanently_failed=False,
         received_at__lt=threshold,
     )
 

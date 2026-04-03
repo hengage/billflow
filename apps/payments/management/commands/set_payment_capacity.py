@@ -8,7 +8,7 @@ class Command(BaseCommand):
     """
     Sets the payment capacity limit across all servers.
 
-    Uses Redis to propagate the change instantly — no deployment needed.
+    Uses Redis to propagate the change instantly.
     The decorator checks this value on every request.
 
     Examples:

@@ -127,6 +127,8 @@ class WebhookLog(models.Model):
     payload = models.JSONField()
     received_at = models.DateTimeField(auto_now_add=True)
     processed = models.BooleanField(default=False)
+    permanently_failed = models.BooleanField(default=False)  # Marked True by the task's on_failure hook when max_retries is exhausted.
+    failure_reason = models.TextField(blank=True)  # Stores the final exception message.
 
     class Meta:
         ordering = ['-received_at']
