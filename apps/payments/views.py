@@ -8,14 +8,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.views import APIView
 
 from api_response.helpers import fail, success
-from notifications.services import NotificationService
-from payments.constants import (
-    PaymentProvider,
-    PaymentStatus,
-    PaymentPurpose,
-    PaystackEvent,
-    StripeEvent,
-)
+from payments.constants import PaymentProvider
 from payments.models import Payment, WebhookLog
 from payments.serializers import (
     InitiatePaymentSerializer,
@@ -25,11 +18,13 @@ from api_response.exceptions import ConflictError
 from payments.services.processor import PaymentProcessor
 from payments.services.providers.paystack import PaystackProvider
 from payments.services.providers.stripe import StripeProvider
+from payments.decorators import payment_capacity_limiter
 from payments.tasks import process_webhook_event
 
 logger = logging.getLogger(__name__)
 
 
+@method_decorator(payment_capacity_limiter, name='dispatch')
 class InitiatePaymentView(APIView):
     """
     POST /api/payments/initiate/
