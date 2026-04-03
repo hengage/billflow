@@ -46,6 +46,17 @@ AUTH_MESSAGES = {
 }
 
 
+# Payment messages
+PAYMENT_MESSAGES = {
+    'CAPACITY_EXCEEDED': 'Payment system at capacity. Please retry shortly.',
+    'TOO_MANY_REQUESTS': 'Too many concurrent payment requests.',
+    'INITIATED': 'Payment initiated successfully.',
+    'COMPLETED': 'Payment completed successfully.',
+    'FAILED': 'Payment failed.',
+    'NOT_FOUND': 'Payment not found.',
+}
+
+
 def get_message(key, category='VALIDATION', **kwargs):
     """
     Retrieve a message by key from the specified category.
@@ -67,6 +78,7 @@ def get_message(key, category='VALIDATION', **kwargs):
         'VALIDATION': VALIDATION_MESSAGES,
         'NOTIFICATION': NOTIFICATION_MESSAGES,
         'AUTH': AUTH_MESSAGES,
+        'PAYMENT': PAYMENT_MESSAGES,
     }
     
     message_dict = categories.get(category, VALIDATION_MESSAGES)

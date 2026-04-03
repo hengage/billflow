@@ -9,6 +9,7 @@ from payments.constants import (
     DEFAULT_PAYMENT_CAPACITY,
     PAYMENT_COUNTER_TTL_SECONDS,
 )
+from utils.messages import get_message
 
 
 def payment_capacity_limiter(view_func):
@@ -42,8 +43,8 @@ def payment_capacity_limiter(view_func):
             response = JsonResponse(
                 build_envelope(
                     data=None,
-                    message='Payment system at capacity. Please retry shortly.',
-                    error={'detail': 'Too many concurrent payment requests.'},
+                    message=get_message('CAPACITY_EXCEEDED', 'PAYMENT'),
+                    error={'detail': get_message('TOO_MANY_REQUESTS', 'PAYMENT')},
                     url=request.path,
                 ),
                 status=HTTPStatus.SERVICE_UNAVAILABLE,

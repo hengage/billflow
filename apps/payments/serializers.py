@@ -30,3 +30,9 @@ class PaymentHistorySerializer(serializers.ModelSerializer):
             'purpose', 'reference', 'last_four', 'card_brand', 'created_at',
         )
         read_only_fields = fields
+
+
+class PaymentInitiateResponseSerializer(serializers.Serializer):
+    """Response data for successful payment initiation."""
+    checkout_url = serializers.URLField()
+    reference = serializers.UUIDField()

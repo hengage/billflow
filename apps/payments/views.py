@@ -20,10 +20,18 @@ from payments.services.providers.paystack import PaystackProvider
 from payments.services.providers.stripe import StripeProvider
 from payments.decorators import payment_capacity_limiter
 from payments.tasks import process_webhook_event
+from payments.api_schema import (
+    payment_initiate_schema,
+    payment_history_schema,
+    paystack_verify_schema,
+    paystack_webhook_schema,
+    stripe_webhook_schema,
+)
 
 logger = logging.getLogger(__name__)
 
 
+@payment_initiate_schema
 @method_decorator(payment_capacity_limiter, name='dispatch')
 class InitiatePaymentView(APIView):
     """
@@ -80,6 +88,7 @@ class InitiatePaymentView(APIView):
             )
 
 
+@paystack_webhook_schema
 @method_decorator(csrf_exempt, name='dispatch')
 class PaystackWebhookView(APIView):
     """
@@ -126,6 +135,7 @@ class PaystackWebhookView(APIView):
         return success(message='Webhook received.')
 
 
+@stripe_webhook_schema
 @method_decorator(csrf_exempt, name='dispatch')
 class StripeWebhookView(APIView):
     """
@@ -164,6 +174,7 @@ class StripeWebhookView(APIView):
         return success(message='Webhook received.')
 
 
+@paystack_verify_schema
 class PaystackVerifyView(APIView):
     """
     GET /api/payments/paystack/verify/<reference>/
@@ -185,6 +196,7 @@ class PaystackVerifyView(APIView):
             )
 
 
+@payment_history_schema
 class PaymentHistoryView(APIView):
     """
     GET /api/payments/history/
