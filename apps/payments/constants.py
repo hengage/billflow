@@ -52,3 +52,14 @@ class StripeEvent:
 # These indicate a non-retryable failure — the provider rejected the
 # request for a business reason that won't change on retry.
 PAYSTACK_NON_RETRYABLE_STATUS_CODES = {400, 422}
+
+
+# Capacity limiter configuration
+# Redis cache keys for tracking concurrent payment requests
+PAYMENT_INFLIGHT_KEY = 'payment_inflight_count'
+PAYMENT_CAPACITY_LIMIT_KEY = 'payment_max_capacity'
+DEFAULT_PAYMENT_CAPACITY = 100
+# Safety net TTL — if a worker process is killed mid-request without
+# running the finally block, the counter would drift upward forever.
+# A 60-second TTL resets it automatically in that edge case.
+PAYMENT_COUNTER_TTL_SECONDS = 60
