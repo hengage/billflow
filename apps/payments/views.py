@@ -78,7 +78,6 @@ class InitiatePaymentView(APIView):
             return success(
                 data=response_body,
                 message='Payment initiated successfully.',
-                status_code=response_code,
             )
 
         except ConflictError as exc:

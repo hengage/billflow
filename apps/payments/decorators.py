@@ -29,12 +29,12 @@ def payment_capacity_limiter(view_func):
         except (ValueError, TypeError):
             max_capacity = DEFAULT_PAYMENT_CAPACITY
 
-        # Atomically increment and check.
-        current = cache.incr(PAYMENT_INFLIGHT_KEY)
-
-        # On the very first increment, set the TTL safety net.
-        if current == 1:
-            cache.expire(PAYMENT_INFLIGHT_KEY, PAYMENT_COUNTER_TTL_SECONDS)
+        try:
+            current = cache.incr(PAYMENT_INFLIGHT_KEY)
+        except ValueError:
+            # Key missing — first request after startup or after TTL expiry.
+            cache.add(PAYMENT_INFLIGHT_KEY, 1, timeout=PAYMENT_COUNTER_TTL_SECONDS)
+            current = 1
 
         if current > max_capacity:
             # Over capacity — decrement immediately so we don't permanently
