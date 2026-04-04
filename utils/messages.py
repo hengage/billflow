@@ -24,6 +24,8 @@ VALIDATION_MESSAGES = {
     'PERMISSION_DENIED': 'You do not have permission to perform this action.',
     'NOT_FOUND': '{resource} not found.',
     'SERVER_ERROR': 'Something went wrong. Please try again later.',
+    'AMOUNT_MAX_LIMIT': 'Amount cannot exceed 1,000,000.',
+    'AMOUNT_MIN_LIMIT': 'Minimum amount is 100.',
 }
 
 # Notification messages

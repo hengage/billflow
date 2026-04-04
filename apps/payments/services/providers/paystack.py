@@ -6,6 +6,7 @@ from django.conf import settings
 from api_response.exceptions import ThirdPartyServiceError, NonRetryableProviderError
 from payments.constants import PAYSTACK_NON_RETRYABLE_STATUS_CODES
 from utils.currency import to_minor
+from utils.messages import PAYMENT_MESSAGES
 
 logger = logging.getLogger(__name__)
 
@@ -13,9 +14,6 @@ logger = logging.getLogger(__name__)
 class PaystackProvider:
     """
     Handles all direct interaction with the Paystack API.
-    Never call the Paystack API from anywhere else in the codebase —
-    all Paystack-specific knowledge (endpoints, headers, error codes,
-    response shapes) is encapsulated here.
 
     Reference: https://paystack.com/docs/api/
     """
@@ -68,10 +66,11 @@ class PaystackProvider:
             # Paystack understood our request but rejected it for a business
             # reason. This will not change on retry — finalise the key with
             # this failure rather than leaving it open for retry.
-            error_message = response.json().get('message', 'Payment rejected by provider.')
+            error_message = response.json().get('message', PAYMENT_MESSAGES['FAILED'])
             logger.warning(
                 f'Paystack permanent rejection | ref={reference} | '
                 f'status={response.status_code} | message={error_message}'
+                f'API Status: {response.status_code}'
             )
             raise NonRetryableProviderError(error_message)
 
@@ -80,6 +79,7 @@ class PaystackProvider:
             logger.error(
                 f'Paystack server error | ref={reference} | '
                 f'status={response.status_code}'
+                f'API Status: {response.status_code}'
             )
             raise ThirdPartyServiceError()
 
@@ -91,8 +91,9 @@ class PaystackProvider:
             logger.warning(
                 f'Paystack logical failure | ref={reference} | '
                 f'message={data.get("message")}'
+                f'API Status: {response.status_code}'
             )
-            raise NonRetryableProviderError(data.get('message', 'Payment initiation failed.'))
+            raise NonRetryableProviderError(data.get('message', PAYMENT_MESSAGES['FAILED']))
 
         return {
             'checkout_url': data['data']['authorization_url'],

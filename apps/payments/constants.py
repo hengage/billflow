@@ -61,6 +61,22 @@ PROVIDER_CURRENCY_MAP = {
 }
 
 
+# Maximum payment amounts (scoped by currency, not provider).
+# If we switch providers for a currency, the limit stays the same.
+MAX_AMOUNT_NGN = 1000000  # 1,000,000 Naira
+MAX_AMOUNT_USD = 1000    # 1,000 Dollars
+
+CURRENCY_MAX_AMOUNT_MAP = {
+    Currency.NGN: MAX_AMOUNT_NGN,
+    Currency.USD: MAX_AMOUNT_USD,
+}
+
+PROVIDER_MAX_AMOUNT_MAP = {
+    PaymentProvider.PAYSTACK: CURRENCY_MAX_AMOUNT_MAP[Currency.NGN],
+    PaymentProvider.STRIPE: CURRENCY_MAX_AMOUNT_MAP[Currency.USD],
+}
+
+
 # Capacity limiter configuration
 # Redis cache keys for tracking concurrent payment requests
 PAYMENT_INFLIGHT_KEY = 'payment_inflight_count'

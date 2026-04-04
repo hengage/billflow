@@ -8,13 +8,13 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.views import APIView
 
 from api_response.helpers import fail, success
+from api_response.exceptions import ConflictError
 from payments.constants import PaymentProvider
 from payments.models import Payment, WebhookLog
 from payments.serializers import (
     InitiatePaymentSerializer,
     PaymentHistorySerializer,
 )
-from api_response.exceptions import ConflictError
 from payments.services.processor import PaymentProcessor
 from payments.services.providers.paystack import PaystackProvider
 from payments.services.providers.stripe import StripeProvider
@@ -27,6 +27,7 @@ from payments.api_schema import (
     paystack_webhook_schema,
     stripe_webhook_schema,
 )
+from utils.messages import PAYMENT_MESSAGES
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +76,12 @@ class InitiatePaymentView(APIView):
 
         try:
             response_body, response_code = processor.execute()
+            if response_code != status.HTTP_200_OK:
+                return fail(
+                    message=PAYMENT_MESSAGES['FAILED'],
+                    error=response_body,
+                    status_code=response_code,
+                )
             return success(
                 data=response_body,
                 message='Payment initiated successfully.',
@@ -84,6 +91,13 @@ class InitiatePaymentView(APIView):
             return fail(
                 message=str(exc),
                 status_code=status.HTTP_409_CONFLICT,
+            )
+
+        except Exception as exc:
+            logger.exception('Payment initiation failed')
+            return fail(
+                message='Payment service temporarily unavailable.',
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
 
 

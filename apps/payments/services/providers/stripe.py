@@ -5,6 +5,7 @@ from api_response.exceptions import ThirdPartyServiceError, NonRetryableProvider
 
 from payments.constants import Currency
 from utils.currency import to_minor
+from utils.messages import PAYMENT_MESSAGES
 
 logger = logging.getLogger(__name__)
 stripe.api_key = settings.STRIPE_SECRET_KEY
@@ -13,7 +14,6 @@ stripe.api_key = settings.STRIPE_SECRET_KEY
 class StripeProvider:
     """
     Handles all direct interaction with the Stripe API.
-    Stripe's SDK handles the HTTP layer — we handle the error classification.
 
     Reference: https://stripe.com/docs/api
     """
@@ -70,7 +70,7 @@ class StripeProvider:
             logger.error(
                 f'Stripe authentication error | ref={reference} | message={str(exc)}'
             )
-            raise NonRetryableProviderError('Payment provider authentication failed.')
+            raise NonRetryableProviderError(PAYMENT_MESSAGES['FAILED'])
 
         except (stripe.error.APIConnectionError, stripe.error.APIError) as exc:
             # Network error or Stripe server error — transient, worth retrying
