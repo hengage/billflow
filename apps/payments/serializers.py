@@ -15,6 +15,10 @@ class InitiatePaymentSerializer(serializers.Serializer):
             raise serializers.ValidationError(
                 {'plan_id': 'plan_id is required for subscription payments.'}
             )
+        if attrs.get('purpose') == PaymentPurpose.WALLET_TOPUP and attrs.get('plan_id'):
+            raise serializers.ValidationError(
+                {'plan_id': 'plan_id should not be provided for wallet top-up payments.'}
+            )
         return attrs
 
 
