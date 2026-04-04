@@ -125,27 +125,21 @@ class PaymentProcessor:
         )
 
     def _acquire_key(self):
-        """
-        tx1 — Atomically create a new idempotency key or lock an existing one.
-
-        By attempting the INSERT first and catching IntegrityError, we use
-        PostgreSQL's own constraint enforcement as the lock. Only one INSERT
-        can win. The loser catches IntegrityError and falls through to
-        SELECT FOR UPDATE, which blocks until the winner's transaction commits.
-        This is atomically correct with zero application-level timing windows.
-        """
-        with transaction.atomic():
+        with transaction.atomic():  # outer transaction
             try:
-                idem_key = IdempotencyKey.objects.create(
-                    key=self.key_value,
-                    user=self.user,
-                    request_path=self.request_path,
-                    request_params=self.request_params,
-                    recovery_point=IdempotencyRecoveryPoint.STARTED,
-                    locked_at=timezone.now(),
-                )
-                logger.info(f'Idempotency key created | key={self.key_value}')
-                return idem_key
+                # Inner atomic block creates a savepoint.
+                # If IntegrityError fires here, only the savepoint rolls back.
+                # The outer transaction stays healthy.
+                with transaction.atomic():  # savepoint
+                    idem_key = IdempotencyKey.objects.create(
+                        key=self.key_value,
+                        user=self.user,
+                        request_path=self.request_path,
+                        request_params=self.request_params,
+                        recovery_point=IdempotencyRecoveryPoint.STARTED,
+                        locked_at=timezone.now(),
+                    )
+                    return idem_key
 
             except IntegrityError:
                 # Key already exists — lock it and inspect its state
@@ -155,31 +149,20 @@ class PaymentProcessor:
                     request_path=self.request_path,
                 )
 
-                # If the client sent the same key with different req body (req parameters),
-                # that's a misuse of the idempotency system. The server rejects it outright.
-                # A new key should be generated for a different payment attempt.
                 if idem_key.request_params != self.request_params:
                     raise ValidationError(
-                        'Idempotency key reused with different request parameters. '
-                        'Generate a new key for a different payment attempt.'
+                        'Idempotency key reused with different request parameters.'
                     )
 
                 stale_threshold = timezone.now() - timedelta(seconds=STALE_LOCK_SECONDS)
-
                 if idem_key.locked_at and idem_key.locked_at > stale_threshold:
-                    # The lock is recent — another worker is actively processing.
-                    # Tell the client to back off and retry in a few seconds.
-                    raise ConflictError('This request is currently being processed.')
+                    raise ConflictError(
+                        'This request is currently being processed. '
+                        'Please retry in a few seconds.'
+                    )
 
-                # The lock is stale — the previous worker must have crashed.
-                # Refresh the lock timestamp and resume from the last checkpoint.
                 idem_key.locked_at = timezone.now()
                 idem_key.save(update_fields=['locked_at'])
-
-                logger.info(
-                    f'Resuming stale key | key={self.key_value} | '
-                    f'recovery_point={idem_key.recovery_point}'
-                )
                 return idem_key
 
     def _create_payment_record(self, idem_key):
