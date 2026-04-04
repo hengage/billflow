@@ -2,6 +2,7 @@ import logging
 from django.db import transaction
 
 from payments.constants import (
+    Currency,
     PaymentProvider,
     PaymentStatus,
     PaymentPurpose,
@@ -9,6 +10,7 @@ from payments.constants import (
     StripeEvent,
 )
 from payments.models import Payment, WebhookLog
+from utils.currency import to_major
 
 logger = logging.getLogger(__name__)
 
@@ -92,8 +94,7 @@ class WebhookHandler:
         if event_type == PaystackEvent.CHARGE_SUCCESS:
             cls._handle_success(
                 reference=reference,
-                # Paystack sends amount in kobo — convert back to NGN
-                amount=data.get('amount', 0) / 100,
+                amount=to_major(data.get('amount', 0), 'NGN'),
                 last_four=data.get('authorization', {}).get('last4', ''),
                 card_brand=data.get('authorization', {}).get('brand', ''),
                 metadata=data.get('metadata', {}),
@@ -134,8 +135,7 @@ class WebhookHandler:
         if event_type == StripeEvent.PAYMENT_INTENT_SUCCEEDED:
             cls._handle_success(
                 reference=reference,
-                # Stripe sends amount in cents — convert back to USD
-                amount=intent.get('amount_received', 0) / 100,
+                amount=to_major(intent.get('amount_received', 0), Currency.USD),
                 # Stripe card details come in a separate charge object,
                 # not directly in the PaymentIntent — leave blank for now
                 last_four='',

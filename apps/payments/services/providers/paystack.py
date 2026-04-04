@@ -1,4 +1,3 @@
-# apps/payments/services/providers/paystack.py
 import hmac
 import hashlib
 import logging
@@ -6,6 +5,7 @@ import requests
 from django.conf import settings
 from api_response.exceptions import ThirdPartyServiceError, NonRetryableProviderError
 from payments.constants import PAYSTACK_NON_RETRYABLE_STATUS_CODES
+from utils.currency import to_minor
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +41,7 @@ class PaystackProvider:
         """
         payload = {
             'email': email,
-            'amount': int(amount * 100),
+            'amount': to_minor(amount),
             'reference': str(reference),
             'metadata': {
                 'reference': str(reference),

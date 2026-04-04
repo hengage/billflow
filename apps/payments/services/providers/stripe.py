@@ -1,8 +1,10 @@
-# apps/payments/services/providers/stripe.py
 import logging
 import stripe
 from django.conf import settings
 from api_response.exceptions import ThirdPartyServiceError, NonRetryableProviderError
+
+from payments.constants import Currency
+from utils.currency import to_minor
 
 logger = logging.getLogger(__name__)
 stripe.api_key = settings.STRIPE_SECRET_KEY
@@ -34,7 +36,7 @@ class StripeProvider:
 
         try:
             intent = stripe.PaymentIntent.create(
-                amount=int(amount * 100),
+                amount=to_minor(amount, Currency.USD),
                 currency='usd',
                 receipt_email=email,
                 metadata=metadata,
