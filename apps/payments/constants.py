@@ -55,7 +55,6 @@ PAYSTACK_NON_RETRYABLE_STATUS_CODES = {400, 422}
 
 
 # Maps each payment provider to the currency it processes.
-# This is a business rule, not just a convenience mapping —
 PROVIDER_CURRENCY_MAP = {
     PaymentProvider.PAYSTACK: Currency.NGN,
     PaymentProvider.STRIPE: Currency.USD,

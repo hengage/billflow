@@ -282,6 +282,10 @@ SPECTACULAR_SETTINGS = {
             }
         }
     },
+    # Explicit enum naming to prevent collision warnings
+    'ENUM_NAME_OVERRIDES': {
+        'PaymentProviderEnum': 'payments.constants.PaymentProvider',
+    },
 }
 
 # Payment Provider API Keys
