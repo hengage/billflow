@@ -32,7 +32,7 @@ services:
 
   celery:
     build: .
-    command: celery -A billflow worker -l info
+    command: celery -A billflow worker -l info -Q default,webhooks,notifications
     env_file: .env
     depends_on:
       - redis

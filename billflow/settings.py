@@ -213,7 +213,7 @@ CELERY_TASK_REJECT_ON_WORKER_LOST = True
 CELERY_BEAT_SCHEDULE = {
     'reconcile-unprocessed-webhooks': {
         'task': 'payments.tasks.reconcile_unprocessed_webhooks',
-        'schedule': 600,  # every 10 minutes
+        'schedule': 60,  # every 1 minute (temporary for testing)
     },
 }
 
