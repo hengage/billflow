@@ -6,6 +6,7 @@ from django.views.decorators.csrf import csrf_exempt
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.views import APIView
+from rest_framework.exceptions import ValidationError
 
 from api_response.helpers import fail, success
 from api_response.exceptions import ConflictError
@@ -91,6 +92,13 @@ class InitiatePaymentView(APIView):
             return fail(
                 message=str(exc),
                 status_code=status.HTTP_409_CONFLICT,
+            )
+
+        except ValidationError as exc:
+            return fail(
+                message=str(exc),
+                error={'detail': str(exc)},
+                status_code=status.HTTP_400_BAD_REQUEST,
             )
 
         except Exception as exc:

@@ -130,7 +130,7 @@ class WebhookHandler:
         payload = webhook_log.payload
         event_type = payload.get('type')
         intent = payload.get('data', {}).get('object', {})
-        reference = intent.get('id')
+        reference = intent.get('metadata', {}).get('reference')
 
         if event_type == StripeEvent.PAYMENT_INTENT_SUCCEEDED:
             cls._handle_success(

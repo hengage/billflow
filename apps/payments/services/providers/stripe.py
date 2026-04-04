@@ -58,14 +58,14 @@ class StripeProvider:
             raise NonRetryableProviderError(str(exc))
 
         except stripe.error.InvalidRequestError as exc:
-            # Our request was malformed in some way — permanent rejection.
+            # Request was malformed in some way — permanent rejection.
             logger.warning(
                 f'Stripe invalid request | ref={reference} | message={str(exc)}'
             )
             raise NonRetryableProviderError(str(exc))
 
         except stripe.error.AuthenticationError as exc:
-            # Our API key is invalid — this is a configuration error,
+            # API key is invalid — this is a configuration error,
             # not a transient failure. Treat as non-retryable.
             logger.error(
                 f'Stripe authentication error | ref={reference} | message={str(exc)}'

@@ -195,13 +195,21 @@ class PaymentProcessor:
         idem_key.refresh_from_db()
         return idem_key
 
+    @staticmethod
+    def _extract_metadata(request_params):
+        """
+        Extract metadata fields from request params.
+        Core payment model params (amount, currency, provider, purpose) are excluded.
+        """
+        core_params = {'amount', 'currency', 'provider', 'purpose'}
+        return {
+            k: str(v) for k, v in request_params.items()
+            if k not in core_params and v is not None
+        } or None
+
     def _call_provider(self, payment):
         """
         The foreign state mutation — calls the appropriate payment gateway.
-
-        No transaction.atomic() wrapping here — deliberately.
-        This method must never hold a database connection open while
-        waiting for an HTTP response from an external service.
 
         Propagates NonRetryableProviderError and ThirdPartyServiceError
         to the caller without catching them — the caller decides what
@@ -210,12 +218,15 @@ class PaymentProcessor:
         from payments.services.providers.paystack import PaystackProvider
         from payments.services.providers.stripe import StripeProvider
 
+        additional_metadata = self._extract_metadata(self.request_params)
+
         if payment.provider == PaymentProvider.PAYSTACK:
             return PaystackProvider.initiate_payment(
                 amount=payment.amount,
                 email=payment.user.email,
                 reference=str(payment.id),
                 purpose=payment.purpose,
+                additional_metadata=additional_metadata,
             )
 
         if payment.provider == PaymentProvider.STRIPE:
@@ -224,6 +235,7 @@ class PaymentProcessor:
                 email=payment.user.email,
                 reference=str(payment.id),
                 purpose=payment.purpose,
+                additional_metadata=additional_metadata,
             )
 
         raise ValueError(f'Unsupported provider: {payment.provider}')
