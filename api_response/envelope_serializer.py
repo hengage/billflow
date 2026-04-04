@@ -4,16 +4,17 @@ from rest_framework import serializers
 def create_success_envelope(data_serializer_class):
     """
     Factory that creates a success envelope serializer class.
+    Uses type() to generate unique class names for DRF Spectacular.
     Usage: create_success_envelope(PaymentInitiateResponseSerializer)
     """
-    class SuccessEnvelopeSerializer(serializers.Serializer):
-        status = serializers.BooleanField(default=True)
-        message = serializers.CharField()
-        data = data_serializer_class()
-        error = serializers.CharField(allow_null=True, default=None)
-        url = serializers.CharField()
-
-    return SuccessEnvelopeSerializer
+    name = f'{data_serializer_class.__name__}SuccessEnvelope'
+    return type(name, (serializers.Serializer,), {
+        'status': serializers.BooleanField(default=True),
+        'message': serializers.CharField(),
+        'data': data_serializer_class(),
+        'error': serializers.CharField(allow_null=True, default=None),
+        'url': serializers.CharField(),
+    })
 
 
 def create_error_envelope(error_serializer_class=None):

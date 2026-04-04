@@ -5,10 +5,6 @@ from .constants import PaymentProvider, PaymentPurpose, Currency
 
 class InitiatePaymentSerializer(serializers.Serializer):
     amount = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=100)
-    currency = serializers.ChoiceField(
-        choices=Currency.choices,
-        default=Currency.NGN,
-    )
     provider = serializers.ChoiceField(choices=PaymentProvider.choices)
     purpose = serializers.ChoiceField(choices=PaymentPurpose.choices)
     # plan_id is only required when purpose is subscription

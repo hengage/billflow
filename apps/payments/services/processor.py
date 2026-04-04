@@ -8,7 +8,7 @@ from rest_framework.exceptions import ValidationError
 
 from api_response.exceptions import ThirdPartyServiceError, NonRetryableProviderError, ConflictError
 from payments.models import IdempotencyKey, Payment
-from payments.constants import IdempotencyRecoveryPoint, PaymentProvider
+from payments.constants import IdempotencyRecoveryPoint, PaymentProvider, PROVIDER_CURRENCY_MAP
 
 logger = logging.getLogger(__name__)
 
@@ -196,7 +196,7 @@ class PaymentProcessor:
             Payment.objects.create(
                 user=self.user,
                 amount=self.request_params['amount'],
-                currency=self.request_params.get('currency', 'NGN'),
+                currency=PROVIDER_CURRENCY_MAP[self.request_params['provider']],
                 purpose=self.request_params['purpose'],
                 provider=self.request_params['provider'],
                 idempotency_key=idem_key,
