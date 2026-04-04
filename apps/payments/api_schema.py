@@ -1,5 +1,6 @@
 from drf_spectacular.utils import extend_schema, OpenApiParameter
 from drf_spectacular.openapi import OpenApiResponse
+from api_response.envelope_serializer import create_success_envelope
 from .serializers import (
     InitiatePaymentSerializer,
     PaymentHistorySerializer,
@@ -26,7 +27,7 @@ payment_initiate_schema = extend_schema(
     request=InitiatePaymentSerializer,
     responses={
         200: OpenApiResponse(
-            response=PaymentInitiateResponseSerializer,
+            response=create_success_envelope(PaymentInitiateResponseSerializer),
             description='Payment initiated successfully.',
         ),
         400: OpenApiResponse(description='Validation failed or missing idempotency key.'),
@@ -42,7 +43,7 @@ payment_history_schema = extend_schema(
     request=None,
     responses={
         200: OpenApiResponse(
-            response=PaymentHistorySerializer(many=True),
+            response=create_success_envelope(PaymentHistorySerializer),
             description='Payment history retrieved.',
         ),
     },
@@ -55,7 +56,7 @@ paystack_verify_schema = extend_schema(
     request=None,
     responses={
         200: OpenApiResponse(description='Transaction verified.'),
-        503: OpenApiResponse(description='Paystack service unavailable.'),
+        503: OpenApiResponse(description='Service unavailable.'),
     },
     tags=['Payments'],
 )
