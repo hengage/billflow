@@ -1,6 +1,7 @@
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework import status
+from rest_framework.exceptions import ValidationError
 from django.core.cache import cache
 from api_response.helpers import success, fail
 from api_response.exceptions import ConflictError
@@ -95,8 +96,14 @@ class WalletTopUpView(APIView):
         except ConflictError as exc:
             return fail(
                 message=str(exc),
-                error={'detail': 'Conflict detected'},
+                error={'detail': str(exc)},
                 status_code=status.HTTP_409_CONFLICT,
+            )
+        except ValidationError as exc:
+            return fail(
+                message=str(exc),
+                error={'detail': str(exc)},
+                status_code=status.HTTP_400_BAD_REQUEST,
             )
         except Exception as exc:
             logger.exception('Wallet top-up failed')

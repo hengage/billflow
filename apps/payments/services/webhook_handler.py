@@ -165,6 +165,19 @@ class WebhookHandler:
     # the reference has been extracted and the amount has been normalised.
     # -------------------------------------------------------------------------
 
+    @staticmethod
+    def _mark_permanently_failed(webhook_log, reference, reason):
+        """
+        Marks a webhook as permanently failed to prevent infinite retry churn.
+        Called when the payment reference cannot be found or other unrecoverable errors.
+        """
+        logger.error(
+            f'{reason} | ref={reference} | marking log={webhook_log.id} as permanently failed'
+        )
+        webhook_log.permanently_failed = True
+        webhook_log.failure_reason = f'{reason} for reference: {reference}'
+        webhook_log.save(update_fields=['permanently_failed', 'failure_reason'])
+
     @classmethod
     def _handle_success(cls, reference, amount, last_four, card_brand, metadata, webhook_log):
         """
@@ -182,8 +195,8 @@ class WebhookHandler:
                 # for the same event from both trying to process it simultaneously.
                 payment = Payment.objects.select_for_update().get(id=reference)
             except Payment.DoesNotExist:
-                logger.error(
-                    f'Payment record not found for webhook | ref={reference}'
+                cls._mark_permanently_failed(
+                    webhook_log, reference, 'Payment record not found'
                 )
                 return
 
@@ -205,7 +218,6 @@ class WebhookHandler:
 
             # Trigger the downstream action that this payment was initiated for.
             # The purpose was stored on the Payment record at initiation time,
-            # so the webhook handler doesn't need the metadata to know what to do.
             if payment.purpose == PaymentPurpose.WALLET_TOPUP:
                 cls._activate_wallet_topup(payment, amount)
 
@@ -216,7 +228,6 @@ class WebhookHandler:
             webhook_log.save(update_fields=['processed'])
 
         # Queue notification after the transaction commits —
-        # never before, in case the transaction rolls back.
         from payments.tasks import send_payment_success_notification
         user = payment.user
         transaction.on_commit(
@@ -237,8 +248,8 @@ class WebhookHandler:
             try:
                 payment = Payment.objects.select_for_update().get(id=reference)
             except Payment.DoesNotExist:
-                logger.error(
-                    f'Payment record not found for webhook | ref={reference}'
+                cls._mark_permanently_failed(
+                    webhook_log, reference, 'Payment record not found'
                 )
                 return
 
@@ -279,9 +290,6 @@ class WebhookHandler:
         WalletService.credit(
             user=payment.user,
             amount=amount,
-            # Using the Payment UUID as the wallet transaction reference
-            # gives us idempotency at the wallet layer too — WalletService.credit()
-            # checks this reference and refuses to process it twice.
             reference=str(payment.id),
         )
 

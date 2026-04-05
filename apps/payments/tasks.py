@@ -64,7 +64,7 @@ class WebhookTaskBase(Task):
             f'WEBHOOK PERMANENTLY FAILED — requires manual review | '
             f'log_id={log_id} | task_id={task_id} | error={str(exc)}'
         )
-        # TODO: Fire alert to Slack/PagerDuty here when alerting is configured.
+        # TODO: Fire alert to PagerDuty here when alerting is configured.
 
 @shared_task(
     bind=True,
