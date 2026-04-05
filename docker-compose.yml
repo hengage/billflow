@@ -24,12 +24,15 @@ services:
 
   redis:
     image: redis:7-alpine
+    command: redis-server --appendonly yes
     ports:
       - "6379:6379"
+    volumes:
+      - redis_data:/data
 
   celery:
     build: .
-    command: celery -A billflow worker -l info
+    command: celery -A billflow worker -l info -Q default,webhooks,notifications
     env_file: .env
     depends_on:
       - redis
@@ -49,3 +52,5 @@ services:
 
 volumes:
   postgres_data:
+  redis_data:
+

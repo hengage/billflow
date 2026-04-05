@@ -1,4 +1,4 @@
-from drf_spectacular.utils import extend_schema
+from drf_spectacular.utils import extend_schema, OpenApiParameter
 from drf_spectacular.openapi import OpenApiResponse
 from .serializers import WalletSerializer, WalletTransactionSerializer, TopUpSerializer
 
@@ -16,6 +16,15 @@ wallet_balance_schema = extend_schema(
 wallet_topup_schema = extend_schema(
     summary='Initiate wallet top-up',
     description='Initiates a wallet top-up via Paystack or Stripe. Returns payment details to complete the transaction.',
+    parameters=[
+        OpenApiParameter(
+            name='X-Idempotency-Key',
+            location=OpenApiParameter.HEADER,
+            required=True,
+            type=str,
+            description='UUID for idempotent request handling.',
+        ),
+    ],
     request=TopUpSerializer,
     responses={
         200: OpenApiResponse(description='Top-up initiated. Complete payment to credit wallet.'),

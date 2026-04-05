@@ -1,6 +1,12 @@
 from rest_framework import serializers
 from .models import Wallet, WalletTransaction
 from utils.messages import WALLET_MESSAGES
+from payments.constants import (
+    Currency,
+    PaymentProvider,
+    PROVIDER_CURRENCY_MAP,
+    PROVIDER_MAX_AMOUNT_MAP,
+)
 
 
 class WalletSerializer(serializers.ModelSerializer):
@@ -27,11 +33,19 @@ class TopUpSerializer(serializers.Serializer):
         max_digits=9,
         decimal_places=2,
         min_value=100,
-        max_value=1000000,
-        error_messages={
-            'max_value': WALLET_MESSAGES['TOPUP_MAX_LIMIT'],
-            'max_digits': WALLET_MESSAGES['TOPUP_MAX_LIMIT'],
-            'min_value': WALLET_MESSAGES['TOPUP_MIN_LIMIT'],
-        }
     )
-    provider = serializers.ChoiceField(choices=['paystack', 'stripe'])
+    provider = serializers.ChoiceField(choices=PaymentProvider.choices)
+
+    def validate(self, attrs):
+        provider = attrs.get('provider')
+        amount = attrs.get('amount')
+        
+        
+        currency = PROVIDER_CURRENCY_MAP.get(provider, Currency.NGN)
+        max_amount = PROVIDER_MAX_AMOUNT_MAP.get(provider, 1000000)
+        
+        if amount and amount > max_amount:
+            raise serializers.ValidationError(
+                {'amount': f'Amount cannot exceed {max_amount:,.0f} {currency}.'}
+            )
+        return attrs

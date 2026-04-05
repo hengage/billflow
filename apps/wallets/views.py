@@ -1,7 +1,14 @@
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
+from rest_framework import status
+from rest_framework.exceptions import ValidationError
 from django.core.cache import cache
 from api_response.helpers import success, fail
+from api_response.exceptions import ConflictError
+import logging
+
+logger = logging.getLogger(__name__)
+
 from .serializers import WalletSerializer, WalletTransactionSerializer, TopUpSerializer
 from .service import WalletService
 from .constants import WALLET_BALANCE_CACHE_KEY_PREFIX
@@ -37,39 +44,74 @@ class WalletView(APIView):
 class WalletTopUpView(APIView):
     """
     POST /api/wallet/topup/ — initiates a wallet top-up.
+
+    Delegates entirely to PaymentProcessor — same idempotency,
+    atomic phases, and provider abstraction as direct payments.
+    The only difference is purpose is always wallet_topup.
     """
     permission_classes = (IsAuthenticated,)
 
     def post(self, request):
         serializer = TopUpSerializer(data=request.data)
+        if not serializer.is_valid():
+            return fail(message='Validation failed.', error=serializer.errors)
 
-        if serializer.is_valid():
-            amount = serializer.validated_data['amount']
-            provider = serializer.validated_data['provider']
-
-            # Payment initiation is handled by the payments app
-            # We import here to avoid circular imports
-            if provider == 'paystack':
-                from payments.services import PaystackService
-                result = PaystackService.initiate_payment(
-                    user=request.user,
-                    amount=amount,
-                    purpose='wallet_topup',
-                )
-            else:
-                from payments.services import StripeService
-                result = StripeService.initiate_payment(
-                    user=request.user,
-                    amount=amount,
-                    purpose='wallet_topup',
-                )
-
-            return success(
-                data=result,
-                message=f'Top-up initiated via {provider}. Complete payment to credit wallet.'
+        idempotency_key = request.headers.get('X-Idempotency-Key')
+        if not idempotency_key:
+            return fail(
+                message='X-Idempotency-Key header is required.',
+                error={'X-Idempotency-Key': 'This header is required for top-up requests.'},
+                status_code=status.HTTP_400_BAD_REQUEST,
             )
 
-        return fail(message='Validation failed.', error=serializer.errors)
+        from payments.services.processor import PaymentProcessor
+        from payments.constants import PaymentPurpose
+        from utils.messages import PAYMENT_MESSAGES
+
+        request_params = {
+            'amount': str(serializer.validated_data['amount']),
+            'provider': serializer.validated_data['provider'],
+            'purpose': PaymentPurpose.WALLET_TOPUP,
+        }
+
+        processor = PaymentProcessor(
+            user=request.user,
+            idempotency_key_value=idempotency_key,
+            request_path=request.path,
+            request_params=request_params,
+        )
+
+        try:
+            response_body, response_code = processor.execute()
+            if response_code != status.HTTP_200_OK:
+                return fail(
+                    message=PAYMENT_MESSAGES['FAILED'],
+                    error=response_body,
+                    status_code=response_code,
+                )
+            return success(
+                data=response_body,
+                message='Top-up initiated. Complete payment to credit your wallet.',
+            )
+        except ConflictError as exc:
+            return fail(
+                message=str(exc),
+                error={'detail': str(exc)},
+                status_code=status.HTTP_409_CONFLICT,
+            )
+        except ValidationError as exc:
+            return fail(
+                message=str(exc),
+                error={'detail': str(exc)},
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
+        except Exception as exc:
+            logger.exception('Wallet top-up failed')
+            return fail(
+                message='Payment service temporarily unavailable.',
+                error={'detail': str(exc)},
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
 
 
 @wallet_transactions_schema

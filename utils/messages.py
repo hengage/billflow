@@ -24,6 +24,8 @@ VALIDATION_MESSAGES = {
     'PERMISSION_DENIED': 'You do not have permission to perform this action.',
     'NOT_FOUND': '{resource} not found.',
     'SERVER_ERROR': 'Something went wrong. Please try again later.',
+    'AMOUNT_MAX_LIMIT': 'Amount cannot exceed 1,000,000.',
+    'AMOUNT_MIN_LIMIT': 'Minimum amount is 100.',
 }
 
 # Notification messages
@@ -43,6 +45,17 @@ AUTH_MESSAGES = {
     'TOKEN_REFRESHED': 'Token refreshed successfully.',
     'PASSWORD_RESET_SENT': 'Password reset instructions sent to your email.',
     'PASSWORD_RESET_SUCCESS': 'Password reset successful.',
+}
+
+
+# Payment messages
+PAYMENT_MESSAGES = {
+    'CAPACITY_EXCEEDED': 'Payment system at capacity. Please retry shortly.',
+    'TOO_MANY_REQUESTS': 'Too many concurrent payment requests.',
+    'INITIATED': 'Payment initiated successfully.',
+    'COMPLETED': 'Payment completed successfully.',
+    'FAILED': 'Payment failed.',
+    'NOT_FOUND': 'Payment not found.',
 }
 
 
@@ -67,6 +80,7 @@ def get_message(key, category='VALIDATION', **kwargs):
         'VALIDATION': VALIDATION_MESSAGES,
         'NOTIFICATION': NOTIFICATION_MESSAGES,
         'AUTH': AUTH_MESSAGES,
+        'PAYMENT': PAYMENT_MESSAGES,
     }
     
     message_dict = categories.get(category, VALIDATION_MESSAGES)

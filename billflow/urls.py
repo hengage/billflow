@@ -15,6 +15,7 @@ urlpatterns = [
     path('accounts/', include('allauth.urls')),
     path('api/notifications/', include('notifications.urls')),
     path('api/wallet/', include('wallets.urls')),
+    path('api/payments/', include('payments.urls')),
 
     # Schema endpoint — the raw OpenAPI JSON, used by Swagger UI and ReDoc
     path('api/schema/', SpectacularAPIView.as_view(), name='schema'),

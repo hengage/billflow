@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     "authentication.apps.AuthenticationConfig",
     "notifications.apps.NotificationsConfig",
     "wallets.apps.WalletsConfig",
+    "payments.apps.PaymentsConfig",
    
     # Django core apps
     'django.contrib.admin',
@@ -194,6 +195,27 @@ CACHES = {
 
 CELERY_BROKER_URL = config("REDIS_URL")
 CELERY_RESULT_BACKEND = config("REDIS_URL")
+CELERY_TASK_QUEUES_DEFAULT = 'default'
+
+CELERY_TASK_ROUTES = {
+    'payments.tasks.process_webhook_event': {'queue': 'webhooks'},
+    'payments.tasks.send_payment_success_notification': {'queue': 'notifications'},
+    'payments.tasks.send_payment_failed_notification': {'queue': 'notifications'},
+    'notifications.tasks.send_email_task': {'queue': 'notifications'},
+}
+
+# task message is only removed from the queue after
+# the task completes. If the worker crashes mid-task, the message goes back
+# to the queue and another worker picks it up
+CELERY_TASK_ACKS_LATE = True
+CELERY_TASK_REJECT_ON_WORKER_LOST = True
+
+CELERY_BEAT_SCHEDULE = {
+    'reconcile-unprocessed-webhooks': {
+        'task': 'payments.tasks.reconcile_unprocessed_webhooks',
+        'schedule': 60,  # every 1 minute (temporary for testing)
+    },
+}
 
 ASGI_APPLICATION = 'billflow.asgi.application'
 
@@ -260,4 +282,12 @@ SPECTACULAR_SETTINGS = {
             }
         }
     },
+    # Explicit enum naming to prevent collision warnings
+    'ENUM_NAME_OVERRIDES': {
+        'PaymentProviderEnum': 'payments.constants.PaymentProvider',
+    },
 }
+
+# Payment Provider API Keys
+PAYSTACK_SECRET_KEY = config('PAYSTACK_SECRET_KEY')
+STRIPE_SECRET_KEY = config('STRIPE_SECRET_KEY')
