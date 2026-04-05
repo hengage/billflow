@@ -14,7 +14,6 @@ class UserAdmin(BaseUserAdmin):
         (None, {'fields': ('email', 'password')}),
         ('Personal Info', {'fields': ('first_name', 'last_name')}),
         ('Roles & Permissions', {'fields': ('role', 'is_active', 'is_staff', 'is_superuser', 'groups', 'user_permissions')}),
-        ('Preferences', {'fields': ('notification_preferences',)}),
         ('Important Dates', {'fields': ('date_joined',)}),
     )
 
