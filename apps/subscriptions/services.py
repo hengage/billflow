@@ -115,9 +115,6 @@ class SubscriptionService:
 
         Returns:
             Subscription instance
-
-        Raises:
-            ValueError if wallet balance is insufficient
         """
         from wallets.service import WalletService
         import uuid

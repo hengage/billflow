@@ -216,6 +216,10 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'payments.tasks.reconcile_unprocessed_webhooks',
         'schedule': 60,  # every 1 minute (temporary for testing)
     },
+    'dispatch-subscription-expiries': {
+        'task': 'subscriptions.dispatch_expiries',
+        'schedule': 600.0,  # 10 minutes in seconds
+    },
 }
 
 ASGI_APPLICATION = 'billflow.asgi.application'

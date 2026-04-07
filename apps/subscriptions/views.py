@@ -211,6 +211,7 @@ class SubscribeView(APIView):
             'provider': validated_data['provider'],
             'purpose': PaymentPurpose.SUBSCRIPTION,
             'plan_id': str(plan.id),
+            'billing_cycle': validated_data['billing_cycle'],
         }
 
         processor = PaymentProcessor(
