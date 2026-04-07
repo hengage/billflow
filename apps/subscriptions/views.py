@@ -6,7 +6,7 @@ from django.core.cache import cache
 
 from api_response.helpers import success, fail, created
 from users.permissions import IsAdmin
-from payments.constants import PaymentPurpose
+from payments.constants import Currency, PaymentPurpose
 from .models import Plan, Subscription
 from .serializers import (
     PlanSerializer,
@@ -39,7 +39,7 @@ class PlanListCreateView(APIView):
         return [IsAuthenticated()]
 
     def get(self, request):
-        currency = request.query_params.get('currency', 'NGN').upper()
+        currency = request.query_params.get('currency', Currency.NGN).upper()
 
         # Cache key includes currency so NGN and USD lists are cached separately
         cache_key = f'{PLANS_LIST_CACHE_KEY}_{currency}'
@@ -53,7 +53,7 @@ class PlanListCreateView(APIView):
         data = serializer.data
 
         # If USD requested, convert prices using cached exchange rate
-        if currency == 'USD':
+        if currency == Currency.USD:
             data = self._convert_to_usd(data)
 
         cache.set(cache_key, data, timeout=PLANS_LIST_CACHE_TTL)
@@ -72,19 +72,19 @@ class PlanListCreateView(APIView):
     @staticmethod
     def _convert_to_usd(plans_data):
         """
-        Converts plan prices to USD using the cached exchange rate.
-        Falls back to stored price_usd if rate is unavailable.
+        Convert NGN prices to USD using cached exchange rate.
+        Returns the same data structure with additional USD price fields.
         """
         try:
             from rates.services import ExchangeRateService
             rate = ExchangeRateService.get_ngn_to_usd_rate()
             for plan in plans_data:
-                plan['price_usd'] = round(
-                    float(plan['price_ngn']) * rate, 2
-                )
+                plan['monthly_price_usd'] = round(float(plan['monthly_price_ngn']) * rate, 2)
+                plan['yearly_price_usd'] = round(float(plan['yearly_price_ngn']) * rate, 2)
         except Exception:
-            # Rate service unavailable — serve stored price_usd as fallback
-            logger.warning('Exchange rate unavailable — serving stored USD prices')
+            import traceback
+            # Todo: implement fallback mechanism
+            logger.error(f'Failed to convert prices to USD: {traceback.format_exc()}')
         return plans_data
 
 
@@ -154,6 +154,7 @@ class SubscribeView(APIView):
             return fail(message='Validation failed.', error=serializer.errors)
 
         plan_id = serializer.validated_data['plan_id']
+        billing_cycle = serializer.validated_data['billing_cycle']
         payment_method = serializer.validated_data['payment_method']
 
         try:
@@ -165,13 +166,13 @@ class SubscribeView(APIView):
             )
 
         if payment_method == PaymentMethod.WALLET:
-            return self._handle_wallet_payment(request.user, plan)
+            return self._handle_wallet_payment(request.user, plan, billing_cycle)
 
         return self._handle_direct_payment(request, plan, serializer.validated_data)
 
-    def _handle_wallet_payment(self, user, plan):
+    def _handle_wallet_payment(self, user, plan, billing_cycle):
         try:
-            subscription = SubscriptionService.subscribe_via_wallet(user, plan)
+            subscription = SubscriptionService.subscribe_via_wallet(user, plan, billing_cycle)
 
             # Queue notification after successful wallet subscription
             from django.db import transaction

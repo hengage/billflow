@@ -40,7 +40,7 @@ class SubscriptionService:
         return subscription
 
     @staticmethod
-    def activate(user, plan_id, payment=None):
+    def activate(user, plan_id, billing_cycle, payment=None):
         """
         Activates a subscription for the user.
         Called by:
@@ -50,6 +50,7 @@ class SubscriptionService:
         Args:
             user: User instance
             plan_id: UUID of the Plan to subscribe to
+            billing_cycle: Billing cycle (monthly or yearly)
             payment: Payment instance (None for wallet payments)
 
         Returns:
@@ -99,19 +100,18 @@ class SubscriptionService:
         return subscription
 
     @staticmethod
-    def subscribe_via_wallet(user, plan):
+    def subscribe_via_wallet(user, plan, billing_cycle):
         """
         Subscribes a user to a plan by deducting from their wallet.
         This is the wallet payment flow — no external provider involved.
 
-        The deduction and subscription creation happen in the same
-        transaction.atomic() block in WalletService.deduct() — if either
-        fails, both roll back. We activate the subscription here, after
-        the deduction succeeds.
+        The deduction and subscription creation happen atomically — if either
+        fails, both roll back via the outer transaction.atomic() block.
 
         Args:
             user: User instance
             plan: Plan instance
+            billing_cycle: Billing cycle (monthly or yearly)
 
         Returns:
             Subscription instance
@@ -121,23 +121,28 @@ class SubscriptionService:
 
         reference = str(uuid.uuid4())
 
-        # WalletService.deduct() handles the atomic balance check and deduction.
-        # It raises ValueError if balance is insufficient — we let that propagate
-        # to the view which returns a 400 to the client.
-        WalletService.deduct(
-            user=user,
-            amount=plan.price_ngn,
-            reference=reference,
-        )
+        if billing_cycle == Subscription.BillingCycle.MONTHLY:
+            amount = plan.monthly_price_ngn
+        else:
+            amount = plan.yearly_price_ngn
 
-        # Deduction succeeded — activate the subscription.
-        # No payment record for wallet subscriptions — the WalletTransaction
-        # is the financial record for this flow.
-        subscription = SubscriptionService.activate(
-            user=user,
-            plan_id=str(plan.id),
-            payment=None,
-        )
+        with transaction.atomic():
+            # WalletService.deduct() handles the atomic balance check and deduction.
+            WalletService.deduct(
+                user=user,
+                amount=amount,
+                reference=reference,
+            )
+
+            # Deduction succeeded — activate the subscription.
+            # No payment record for wallet subscriptions — the WalletTransaction
+            # is the financial record for this flow.
+            subscription = SubscriptionService.activate(
+                user=user,
+                plan_id=str(plan.id),
+                billing_cycle=billing_cycle,
+                payment=None,
+            )
 
         return subscription
 
