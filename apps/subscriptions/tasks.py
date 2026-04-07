@@ -2,6 +2,9 @@ import logging
 from django.utils import timezone
 from django.db import transaction
 from celery import shared_task
+
+from utils.celery_helpers import backoff_with_jitter, MAX_RETRIES
+
 from .models import Subscription
 
 logger = logging.getLogger(__name__)
@@ -31,7 +34,7 @@ def dispatch_subscription_expiries():
         logger.info(f"Dispatched {count} subscriptions for expiry.")
 
 
-@shared_task(bind=True, max_retries=3)
+@shared_task(bind=True, max_retries=MAX_RETRIES)
 def process_single_expiry(self, subscription_id):
     """
     Handles the actual side-effects of expiry.
@@ -63,4 +66,4 @@ def process_single_expiry(self, subscription_id):
 
     except Exception as exc:
         logger.error(f"Error expiring sub {subscription_id}: {exc}")
-        raise self.retry(exc=exc, countdown=60)
+        raise self.retry(exc=exc, countdown=backoff_with_jitter(self.request.retries))
