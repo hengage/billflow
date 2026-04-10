@@ -25,7 +25,7 @@ from payments.constants import (
     PaymentProvider,
     Currency,
 )
-from payments.exceptions import PaymentDeclined
+from api_response.exceptions import PaymentDeclined
 
 logger = logging.getLogger(__name__)
 
