@@ -1,0 +1,297 @@
+"""
+RenewalProcessor - Orchestrates subscription auto-renewal with idempotency.
+
+Mirrors PaymentProcessor pattern for consistency:
+- Four-phase execution with crash recovery
+- Idempotency key management
+- Provider call abstraction
+- State finalization
+
+Usage:
+    RenewalProcessor(subscription_id).execute()
+"""
+import logging
+from datetime import timedelta
+from django.db import transaction, IntegrityError
+from django.utils import timezone
+from rest_framework import status
+
+from subscriptions.models import Subscription
+from payments.models import IdempotencyKey, Payment
+from payments.constants import (
+    IdempotencyRecoveryPoint,
+    PaymentStatus,
+    PaymentPurpose,
+    PaymentProvider,
+    Currency,
+)
+from payments.exceptions import PaymentDeclined
+
+logger = logging.getLogger(__name__)
+
+STALE_LOCK_SECONDS = 60  # 1 minute threshold for stale locks
+MAX_RENEWAL_ATTEMPTS = 3
+
+
+class RenewalProcessor:
+    """
+    Orchestrates subscription auto-renewal with idempotency and crash recovery.
+
+    Four-phase pattern:
+    1. Atomic: Create/get IdempotencyKey, acquire lock
+    2. Atomic: Create PENDING Payment record (checkpoint before foreign call)
+    3. Foreign: Call payment provider (NO transaction)
+    4. Webhook: On confirmation, mark Payment SUCCESS, renew subscription
+
+    The processor handles:
+    - Concurrency via select_for_update and idempotency key locking
+    - Crash recovery via recovery_point checks
+    - Provider call abstraction
+    - State finalization and counter increments
+    """
+
+    def __init__(self, subscription_id):
+        self.subscription_id = subscription_id
+        self.subscription = None
+        self.idem_key = None
+        self.key_value = None
+        self.payment = None
+        self.amount = None
+        self.next_attempt = None
+
+    def execute(self):
+        """
+        Main entry point. Executes the renewal flow.
+
+        Returns:
+            None (side effects: payment created, provider called)
+
+        Raises:
+            Exception: Transient errors for Celery retry
+        """
+        # Phase 1: Acquire subscription lock and idempotency key
+        self._phase_1_acquire()
+
+        # Phase 2: Create payment record (if not already created)
+        self._phase_2_create_payment()
+
+        # Phase 3: Call provider
+        self._phase_3_call_provider()
+
+    # -------------------------------------------------------------------------
+    # PHASE 1: Acquire subscription lock and idempotency key
+    # -------------------------------------------------------------------------
+
+    def _phase_1_acquire(self):
+        """
+        Atomically locks subscription and creates/acquires idempotency key.
+
+        Uses nested atomic blocks to handle IntegrityError on key creation.
+        """
+        with transaction.atomic():
+            # Lock subscription with skip_locked to avoid waiting
+            self.subscription = Subscription.objects.select_for_update(
+                skip_locked=True
+            ).filter(
+                id=self.subscription_id,
+                status=Subscription.Status.ACTIVE,
+            ).select_related('plan', 'user').first()
+
+            if not self.subscription:
+                # Already processed by another worker or not active
+                return
+
+            # Calculate next attempt number for key generation
+            self.next_attempt = self.subscription.renewal_attempts + 1
+            self.key_value = f"renewal-{self.subscription_id}-v{self.next_attempt}"
+
+            # Calculate amount based on billing cycle
+            plan = self.subscription.plan
+            if self.subscription.billing_cycle == Subscription.BillingCycle.MONTHLY:
+                self.amount = plan.monthly_price_ngn
+            else:
+                self.amount = plan.yearly_price_ngn
+
+            # Create or acquire idempotency key
+            self._acquire_key()
+
+    def _acquire_key(self):
+        """
+        Creates or acquires an idempotency key with proper locking.
+
+        Pattern: inner atomic for create (savepoint), outer for the whole operation.
+        Handles race conditions via IntegrityError catch and lock inspection.
+        """
+        try:
+            with transaction.atomic():  # savepoint
+                self.idem_key = IdempotencyKey.objects.create(
+                    user=self.subscription.user,
+                    key=self.key_value,
+                    request_path="subscriptions.services.renewal.RenewalProcessor",
+                    request_params={
+                        'subscription_id': str(self.subscription_id),
+                        'attempt_number': self.next_attempt,
+                    },
+                    recovery_point=IdempotencyRecoveryPoint.STARTED,
+                    locked_at=timezone.now(),
+                )
+        except IntegrityError:
+            # Key already exists - lock it and inspect its state
+            self.idem_key = IdempotencyKey.objects.select_for_update().get(
+                user=self.subscription.user,
+                key=self.key_value,
+                request_path="subscriptions.services.renewal.RenewalProcessor",
+            )
+
+            # Check if already finished
+            if self.idem_key.recovery_point == IdempotencyRecoveryPoint.FINISHED:
+                logger.info(f"Renewal attempt already completed: {self.subscription_id}")
+                return
+
+            # Check for stale lock (another worker died mid-processing)
+            stale_threshold = timezone.now() - timedelta(seconds=STALE_LOCK_SECONDS)
+            if self.idem_key.locked_at and self.idem_key.locked_at > stale_threshold:
+                # Another worker is actively processing - skip
+                logger.info(
+                    f"Renewal attempt {self.next_attempt} for subscription "
+                    f"{self.subscription_id} is being processed by another worker"
+                )
+                return
+
+            # Update lock for this attempt
+            self.idem_key.locked_at = timezone.now()
+            self.idem_key.save(update_fields=['locked_at'])
+
+    # -------------------------------------------------------------------------
+    # PHASE 2: Create payment record
+    # -------------------------------------------------------------------------
+
+    def _phase_2_create_payment(self):
+        """
+        Creates PENDING Payment record before provider call.
+
+        If recovery_point is STARTED, create payment and advance to PAYMENT_CREATED.
+        If already PAYMENT_CREATED (crash recovery), skip creation.
+        """
+        import uuid
+
+        if not self.idem_key:
+            return
+
+        if self.idem_key.recovery_point == IdempotencyRecoveryPoint.STARTED:
+            with transaction.atomic():
+                # Determine provider from user's stored payment method
+                # TODO: Get from user's stored method once StoredPaymentMethod exists
+                provider = PaymentProvider.PAYSTACK
+                currency = Currency.NGN if provider == PaymentProvider.PAYSTACK else Currency.USD
+
+                self.payment = Payment.objects.create(
+                    user=self.subscription.user,
+                    amount=self.amount,
+                    currency=currency,
+                    provider=provider,
+                    purpose=PaymentPurpose.SUBSCRIPTION,
+                    status=PaymentStatus.PENDING,
+                    idempotency_key=self.idem_key,
+                    reference=str(uuid.uuid4()),
+                    metadata={
+                        'attempt_number': self.next_attempt,
+                    },
+                )
+                self.idem_key.recovery_point = IdempotencyRecoveryPoint.PAYMENT_CREATED
+                self.idem_key.save(update_fields=['recovery_point'])
+        else:
+            # Crash recovery - payment already exists
+            self.payment = self.idem_key.payment
+
+    # -------------------------------------------------------------------------
+    # PHASE 3: Call provider
+    # -------------------------------------------------------------------------
+
+    def _phase_3_call_provider(self):
+        """
+        Calls payment provider to charge stored method.
+
+        NO transaction - foreign state mutation.
+        Handles success, decline, and transient errors.
+        """
+        if not self.payment:
+            return
+
+        from payments.services import PaymentService
+        from notifications.services import NotificationService
+
+        try:
+            provider_data = PaymentService.charge_stored_method(
+                user=self.subscription.user,
+                amount=self.amount,
+                reference=self.payment.reference,
+                description=f"Renewal: {self.subscription.plan.name} ({self.subscription.billing_cycle})",
+                idempotency_key=self.key_value,
+                purpose=PaymentPurpose.SUBSCRIPTION,
+                additional_metadata={
+                    'attempt_number': self.next_attempt,
+                },
+            )
+
+            # Provider accepted the charge - finalize
+            self._finalize(
+                response_code=status.HTTP_200_OK,
+                response_body=provider_data,
+            )
+
+            logger.info(
+                f"Renewal charge initiated: {self.subscription_id} | "
+                f"payment={self.payment.id} | awaiting webhook confirmation"
+            )
+
+        except PaymentDeclined as exc:
+            # Non-retryable decline - finalize and notify
+            self.payment.status = PaymentStatus.FAILED
+            self.payment.save(update_fields=['status'])
+
+            self._finalize(
+                response_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                response_body={'error': str(exc), 'provider': self.payment.provider},
+            )
+
+            # Refresh to get updated renewal_attempts from finalize
+            self.subscription.refresh_from_db()
+
+            # Notify user
+            attempts_remaining = MAX_RENEWAL_ATTEMPTS - self.subscription.renewal_attempts
+            NotificationService.send_renewal_failed(
+                user=self.subscription.user,
+                subscription=self.subscription,
+                attempts_remaining=attempts_remaining,
+            )
+            logger.warning(
+                f"Renewal declined: {self.subscription_id}, "
+                f"attempt {self.subscription.renewal_attempts}, "
+                f"{attempts_remaining} remaining"
+            )
+
+    # -------------------------------------------------------------------------
+    # FINALIZATION
+    # -------------------------------------------------------------------------
+
+    def _finalize(self, response_code, response_body):
+        """
+        Finalizes the idempotency key and increments renewal counter.
+
+        Called after definite success or non-retryable failure.
+        """
+        with transaction.atomic():
+            self.idem_key.recovery_point = IdempotencyRecoveryPoint.FINISHED
+            self.idem_key.response_code = response_code
+            self.idem_key.response_body = response_body
+            self.idem_key.save(update_fields=[
+                'recovery_point', 'response_code', 'response_body'
+            ])
+
+            # Increment renewal attempt counter
+            self.subscription.renewal_attempts += 1
+            self.subscription.last_renewal_attempt_at = timezone.now()
+            self.subscription.save(update_fields=[
+                'renewal_attempts', 'last_renewal_attempt_at'
+            ])

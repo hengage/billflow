@@ -35,6 +35,7 @@ class Subscription(models.Model):
         ACTIVE = 'active', 'Active'
         CANCELLED = 'cancelled', 'Cancelled'
         EXPIRED = 'expired', 'Expired'
+        RENEWED = 'renewed', 'Renewed'
 
     class BillingCycle(models.TextChoices):
         MONTHLY = 'monthly', 'Monthly'
@@ -73,6 +74,10 @@ class Subscription(models.Model):
         related_name='subscription',
     )
     created_at = models.DateTimeField(auto_now_add=True)
+
+    # Auto-renewal tracking
+    renewal_attempts = models.PositiveSmallIntegerField(default=0)
+    last_renewal_attempt_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ['-created_at']

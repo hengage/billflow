@@ -22,7 +22,6 @@ class PaymentProvider(models.TextChoices):
 class IdempotencyRecoveryPoint(models.TextChoices):
     STARTED = 'started', _('Started')
     PAYMENT_CREATED = 'payment_created', _('Payment Created')
-    PROVIDER_INITIALIZED = 'provider_initialized', _('Provider Initialized')
     FINISHED = 'finished', _('Finished')
 
 

@@ -13,6 +13,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 from pathlib import Path
 import sys
 from datetime import timedelta
+from celery.schedules import crontab
 from utils.paths import get_project_root, get_apps_dir
 from decouple import config
 from .logging import LOGGING
@@ -219,6 +220,10 @@ CELERY_BEAT_SCHEDULE = {
     'dispatch-subscription-expiries': {
         'task': 'subscriptions.dispatch_expiries',
         'schedule': 600.0,  # 10 minutes in seconds
+    },
+    'dispatch-renewals-hourly': {
+        'task': 'subscriptions.dispatch_renewals',
+        'schedule': crontab(minute=0),  # Every hour on the hour
     },
 }
 

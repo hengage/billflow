@@ -1,11 +1,16 @@
+"""
+SubscriptionService - Subscription lifecycle management.
+
+Handles activation, cancellation, expiration, and renewal of subscriptions.
+"""
 import logging
 from datetime import timedelta
 from django.db import transaction
 from django.core.cache import cache
 from django.utils import timezone
 
-from .models import Plan, Subscription
-from .constants import (
+from ..models import Plan, Subscription
+from ..constants import (
     USER_SUBSCRIPTION_CACHE_KEY_PREFIX,
     USER_SUBSCRIPTION_CACHE_TTL,
 )
@@ -22,7 +27,7 @@ class SubscriptionService:
     def get_active_subscription(user):
         """
         Returns the user's active subscription or None.
-        Checks cache first — falls back to database.
+        Checks cache first - falls back to database.
         Cache is invalidated by post_save signal on Subscription.
         """
         cache_key = f'{USER_SUBSCRIPTION_CACHE_KEY_PREFIX}_{user.id}'
@@ -103,9 +108,9 @@ class SubscriptionService:
     def subscribe_via_wallet(user, plan, billing_cycle):
         """
         Subscribes a user to a plan by deducting from their wallet.
-        This is the wallet payment flow — no external provider involved.
+        This is the wallet payment flow - no external provider involved.
 
-        The deduction and subscription creation happen atomically — if either
+        The deduction and subscription creation happen atomically - if either
         fails, both roll back via the outer transaction.atomic() block.
 
         Args:
@@ -134,8 +139,8 @@ class SubscriptionService:
                 reference=reference,
             )
 
-            # Deduction succeeded — activate the subscription.
-            # No payment record for wallet subscriptions — the WalletTransaction
+            # Deduction succeeded - activate the subscription.
+            # No payment record for wallet subscriptions - the WalletTransaction
             # is the financial record for this flow.
             subscription = SubscriptionService.activate(
                 user=user,
@@ -198,3 +203,56 @@ class SubscriptionService:
             f'Subscription expired | user={subscription.user_id} | '
             f'subscription={subscription.id}'
         )
+
+    @staticmethod
+    def renew(old_subscription, payment):
+        """
+        Renews a subscription by marking old as RENEWED and creating new ACTIVE.
+
+        New subscription starts from max(now, old.end_date) to ensure no gap.
+        Called by webhook handler after successful renewal payment.
+
+        Args:
+            old_subscription: Subscription instance to renew (must be ACTIVE)
+            payment: Payment instance from successful charge
+
+        Returns:
+            New Subscription instance
+        """
+        with transaction.atomic():
+            # Mark old as RENEWED
+            old_subscription.status = Subscription.Status.RENEWED
+            old_subscription.save(update_fields=['status', 'updated_at'])
+
+            # Calculate new period
+            now = timezone.now()
+            new_start = max(now, old_subscription.end_date_utc)
+
+            if old_subscription.billing_cycle == Subscription.BillingCycle.MONTHLY:
+                new_end = new_start + timedelta(days=30)
+                amount = old_subscription.plan.monthly_price_ngn
+            else:
+                new_end = new_start + timedelta(days=365)
+                amount = old_subscription.plan.yearly_price_ngn
+
+            # Create new subscription
+            new_subscription = Subscription.objects.create(
+                user=old_subscription.user,
+                plan=old_subscription.plan,
+                billing_cycle=old_subscription.billing_cycle,
+                amount_paid=amount,
+                status=Subscription.Status.ACTIVE,
+                start_date_utc=new_start,
+                end_date_utc=new_end,
+                payment=payment,
+            )
+
+        # Invalidate cache
+        cache_key = f'{USER_SUBSCRIPTION_CACHE_KEY_PREFIX}_{old_subscription.user.id}'
+        cache.delete(cache_key)
+
+        logger.info(
+            f'Subscription renewed | old={old_subscription.id} | '
+            f'new={new_subscription.id} | user={old_subscription.user.id}'
+        )
+        return new_subscription
