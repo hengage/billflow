@@ -135,3 +135,76 @@ class WebhookLog(models.Model):
 
     def __str__(self):
         return f'{self.provider} | {self.event_type} | processed={self.processed}'
+
+
+class StoredPaymentMethod(models.Model):
+    """
+    Stores tokenized payment method references for recurring charges.
+
+    PCI DSS compliance: raw card data is never stored.
+    authorization_code (Paystack) and payment_method_id (Stripe) are tokens
+    that represent the card on the provider's servers — not the card itself.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='stored_payment_methods',
+    )
+    provider = models.CharField(max_length=20, choices=PaymentProvider.choices)
+
+    # --- Provider-agnostic token fields ---
+    # authorization_code (Paystack) or payment_method_id (Stripe)
+    # The provider's token for charging this card
+    authorization_code = models.CharField(max_length=100, blank=True)
+
+    # provider_customer_id: customer_code (Paystack) or customer_id cus_xxx (Stripe)
+    # Required for off-session/recurring charges
+    provider_customer_id = models.CharField(max_length=100, blank=True)
+
+    # The email tied to this authorization at creation time
+    # May differ from user's current email — critical for Paystack
+    billing_email = models.CharField(max_length=255, blank=True)
+    
+    # signature: Paystack's signature or Stripe's fingerprint
+    # Deduplication key — unique per card per provider
+    signature = models.CharField(max_length=100, blank=True)
+
+    # --- Display fields ---
+    last_four = models.CharField(max_length=4)
+    card_brand = models.CharField(max_length=20)
+    exp_month = models.CharField(max_length=2)
+    exp_year = models.CharField(max_length=4)
+    bank = models.CharField(max_length=100, blank=True)
+    card_type = models.CharField(max_length=50, blank=True)  # debit, credit
+
+    # Only reusable authorizations can be charged recurrently.
+    # Paystack's reusable field from the authorization object.
+    is_reusable = models.BooleanField(default=True)
+
+    # The user's default payment method for auto-renewal
+    is_default = models.BooleanField(default=False)
+
+    is_active = models.BooleanField(default=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        # Prevent storing the same card twice for the same user
+        # signature is Paystack's unique identifier per card
+        constraints = [
+            models.UniqueConstraint(
+                fields=['user', 'signature'],
+                condition=models.Q(provider='paystack'),
+                name='unique_paystack_card_per_user',
+            ),
+            models.UniqueConstraint(
+                fields=['user', 'authorization_code'],
+                condition=models.Q(provider='stripe'),
+                name='unique_stripe_method_per_user',
+            ),
+        ]
+
+    def __str__(self):
+        return f'{self.user.email} — {self.card_brand} ****{self.last_four} ({self.provider})'

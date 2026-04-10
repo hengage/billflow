@@ -98,6 +98,8 @@ class WebhookHandler:
                 last_four=data.get('authorization', {}).get('last4', ''),
                 card_brand=data.get('authorization', {}).get('brand', ''),
                 metadata=data.get('metadata', {}),
+                raw_data=data,
+                provider=PaymentProvider.PAYSTACK,
                 webhook_log=webhook_log,
             )
 
@@ -141,6 +143,8 @@ class WebhookHandler:
                 last_four='',
                 card_brand='',
                 metadata=intent.get('metadata', {}),
+                raw_data=payload,
+                provider=PaymentProvider.STRIPE,
                 webhook_log=webhook_log,
             )
 
@@ -179,7 +183,7 @@ class WebhookHandler:
         webhook_log.save(update_fields=['permanently_failed', 'failure_reason'])
 
     @classmethod
-    def _handle_success(cls, reference, amount, last_four, card_brand, metadata, webhook_log):
+    def _handle_success(cls, reference, amount, last_four, card_brand, metadata, raw_data, provider, webhook_log):
         """
         Processes a successful payment event.
 
@@ -223,6 +227,9 @@ class WebhookHandler:
 
             elif payment.purpose == PaymentPurpose.SUBSCRIPTION:
                 cls._activate_subscription(payment, metadata)
+
+            # Store authorization for recurring charges if applicable
+            cls._store_payment_method_if_applicable(payment, raw_data, provider)
 
             webhook_log.processed = True
             webhook_log.save(update_fields=['processed'])
@@ -272,6 +279,47 @@ class WebhookHandler:
                 user_id=str(user.id),
                 payment_id=str(payment.id),
             )
+        )
+
+    @staticmethod
+    def _store_payment_method_if_applicable(payment, raw_data, provider):
+        """
+        Stores a reusable payment method for future recurring charges.
+
+        Provider-agnostic dispatcher — each provider extracts its own
+        payment method data according to its payload structure.
+        """
+        from payments.models import StoredPaymentMethod
+        from payments.services.providers.paystack import PaystackProvider
+
+        extractors = {
+            PaymentProvider.PAYSTACK: PaystackProvider.extract_storable_method,
+        }
+
+        extractor = extractors.get(provider)
+        if not extractor:
+            return
+
+        storable = extractor(raw_data)
+        if not storable:
+            return
+
+        StoredPaymentMethod.objects.get_or_create(
+            user=payment.user,
+            signature=storable.signature,
+            provider=provider,
+            defaults={
+                'authorization_code': storable.authorization_code,
+                'provider_customer_id': storable.provider_customer_id,
+                'billing_email': storable.billing_email,
+                'last_four': storable.last_four,
+                'card_brand': storable.card_brand,
+                'exp_month': storable.exp_month,
+                'exp_year': storable.exp_year,
+                'bank': storable.bank,
+                'card_type': storable.card_type,
+                'is_reusable': True,
+            }
         )
 
     # -------------------------------------------------------------------------

@@ -142,3 +142,39 @@ class PaystackProvider:
                 f'Paystack verification failed | ref={reference} | error={str(exc)}'
             )
             raise ThirdPartyServiceError()
+
+    @staticmethod
+    def extract_storable_method(data):
+        """
+        Extracts a storable payment method from a Paystack charge.success payload.
+        Returns None if the authorization is not reusable.
+
+        Paystack uses an explicit 'reusable' flag on the authorization object.
+        Only cards marked reusable can be charged recurrently.
+
+        Reference: https://paystack.com/docs/payments/recurring-charges/
+        """
+        from payments.services.storable_payment_method import StorablePaymentMethod
+
+        authorization = data.get('authorization', {})
+
+        # Paystack's explicit reusability flag — check before storing
+        if not authorization.get('reusable'):
+            return None
+
+        signature = authorization.get('signature', '')
+        if not signature:
+            return None
+
+        return StorablePaymentMethod(
+            authorization_code=authorization.get('authorization_code', ''),
+            provider_customer_id=data.get('customer', {}).get('customer_code', ''),
+            billing_email=data.get('customer', {}).get('email', ''),
+            signature=signature,
+            last_four=authorization.get('last4', ''),
+            card_brand=authorization.get('brand', ''),
+            exp_month=authorization.get('exp_month', ''),
+            exp_year=authorization.get('exp_year', ''),
+            bank=authorization.get('bank', ''),
+            card_type=authorization.get('card_type', ''),
+        )
