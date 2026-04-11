@@ -61,7 +61,13 @@ class RenewalProcessor:
 
     def execute(self):
         """
-        Main entry point. Executes the renewal flow.
+        Main entry point. Executes the 4-phase renewal flow.
+
+        Phases:
+        1. Acquire - Lock subscription, get/create idempotency key
+        2. Create - Create PENDING Payment record, lookup stored method
+        3. Call - Charge stored method via provider (outside transaction)
+        4. Finalize - Mark idempotency key FINISHED, handle success/decline
 
         Returns:
             None (side effects: payment created, provider called)
@@ -75,8 +81,11 @@ class RenewalProcessor:
         # Phase 2: Create payment record (if not already created)
         self._phase_2_create_payment()
 
-        # Phase 3: Call provider
-        self._phase_3_call_provider()
+        # Phase 3: Call provider (outside transaction - foreign state mutation)
+        provider_result = self._phase_3_call_provider()
+
+        # Phase 4: Finalize based on provider result (atomic)
+        self._phase_4_finalize(provider_result)
 
     # -------------------------------------------------------------------------
     # PHASE 1: Acquire subscription lock and idempotency key
@@ -266,19 +275,18 @@ class RenewalProcessor:
 
     def _phase_3_call_provider(self):
         """
-        Calls payment provider to charge stored method.
+        Phase 3: Calls payment provider to charge stored method.
 
         NO transaction - foreign state mutation.
-        Handles success, decline, and transient errors.
+        Returns dict with result info for Phase 4 finalization.
+        Raises on transient errors for Celery retry.
         """
         if not self.payment:
-            return
+            return None
 
         from payments.services.providers.paystack import PaystackProvider
-        from notifications.services import NotificationService
 
         try:
-            # Use stored method from Phase 2 to charge via provider
             if self.stored_method.provider == PaymentProvider.PAYSTACK:
                 provider_data = PaystackProvider.charge_authorization(
                     authorization_code=self.stored_method.authorization_code,
@@ -291,33 +299,60 @@ class RenewalProcessor:
                     },
                 )
             else:
-                raise PaymentDeclined(f'Provider {self.stored_method.provider} not supported for stored charges.')
+                raise PaymentDeclined(
+                    f'Provider {self.stored_method.provider} not supported for stored charges.'
+                )
 
-            # Provider accepted the charge - finalize
+            return {
+                'success': True,
+                'provider_data': provider_data,
+            }
+
+        except PaymentDeclined as exc:
+            return {
+                'success': False,
+                'declined': True,
+                'error': str(exc),
+            }
+
+    def _phase_4_finalize(self, provider_result):
+        """
+        Phase 4: Finalizes the renewal attempt based on provider result.
+
+        Atomic - updates idempotency key and handles success/decline outcomes.
+        """
+        from notifications.services import NotificationService
+
+        if not provider_result:
+            return
+
+        if provider_result['success']:
+            # Success path - finalize and log
             self._finalize(
                 response_code=status.HTTP_200_OK,
-                response_body=provider_data,
+                response_body=provider_result['provider_data'],
             )
-
             logger.info(
                 f"Renewal charge initiated: {self.subscription_id} | "
                 f"payment={self.payment.id} | awaiting webhook confirmation"
             )
-
-        except PaymentDeclined as exc:
-            # Non-retryable decline - finalize and notify
+        else:
+            # Decline path - mark payment failed, finalize, notify
             self.payment.status = PaymentStatus.FAILED
             self.payment.save(update_fields=['status'])
 
             self._finalize(
                 response_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                response_body={'error': str(exc), 'provider': self.payment.provider},
+                response_body={
+                    'error': provider_result['error'],
+                    'provider': self.payment.provider,
+                },
             )
 
             # Refresh to get updated renewal_attempts from finalize
             self.subscription.refresh_from_db()
 
-            # Notify user
+            # Notify user of failed renewal
             attempts_remaining = MAX_RENEWAL_ATTEMPTS - self.subscription.renewal_attempts
             NotificationService.send_renewal_failed(
                 user=self.subscription.user,
