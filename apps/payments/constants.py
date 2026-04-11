@@ -11,7 +11,8 @@ class PaymentStatus(models.TextChoices):
 
 class PaymentPurpose(models.TextChoices):
     WALLET_TOPUP = 'wallet_topup', _('Wallet Top-up')
-    SUBSCRIPTION = 'subscription', _('Subscription Payment')
+    SUBSCRIPTION = 'subscription', _('New Subscription')
+    RENEW_SUBSCRIPTION = 'renew_subscription', _('Subscription Renewal')
 
 
 class PaymentProvider(models.TextChoices):

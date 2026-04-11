@@ -228,6 +228,9 @@ class WebhookHandler:
             elif payment.purpose == PaymentPurpose.SUBSCRIPTION:
                 cls._activate_subscription(payment, metadata)
 
+            elif payment.purpose == PaymentPurpose.RENEW_SUBSCRIPTION:
+                cls._renew_subscription(payment, metadata)
+
             # Store authorization for recurring charges if applicable
             cls._store_payment_method_if_applicable(payment, raw_data, provider)
 
@@ -371,4 +374,35 @@ class WebhookHandler:
             user=payment.user,
             plan_id=plan_id,
             payment=payment,
+        )
+
+    @staticmethod
+    def _renew_subscription(payment, metadata):
+        """
+        Renews a subscription after a successful renewal payment.
+        Finds the active subscription and renews it via SubscriptionService.renew().
+        """
+        from subscriptions.services import SubscriptionService
+        from subscriptions.models import Subscription
+
+        # Find the active subscription to renew
+        old_subscription = Subscription.objects.filter(
+            user=payment.user,
+            status=Subscription.Status.ACTIVE,
+        ).select_related('plan').first()
+
+        if not old_subscription:
+            logger.error(
+                f'Renewal payment but no active subscription found | '
+                f'payment={payment.id} | user={payment.user.id}'
+            )
+            return
+
+        SubscriptionService.renew(
+            old_subscription=old_subscription,
+            payment=payment,
+        )
+        logger.info(
+            f'Subscription renewed via webhook | '
+            f'payment={payment.id} | old_sub={old_subscription.id}'
         )

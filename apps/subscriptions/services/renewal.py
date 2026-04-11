@@ -244,7 +244,7 @@ class RenewalProcessor:
                     amount=self.amount,
                     currency=currency,
                     provider=provider,
-                    purpose=PaymentPurpose.SUBSCRIPTION,
+                    purpose=PaymentPurpose.RENEW_SUBSCRIPTION,
                     status=PaymentStatus.PENDING,
                     idempotency_key=self.idem_key,
                     reference=str(uuid.uuid4()),
@@ -285,7 +285,7 @@ class RenewalProcessor:
                     email=self.stored_method.billing_email,
                     amount=self.amount,
                     reference=self.payment.reference,
-                    purpose=PaymentPurpose.SUBSCRIPTION,
+                    purpose=PaymentPurpose.RENEW_SUBSCRIPTION,
                     metadata={
                         'attempt_number': self.next_attempt,
                     },
