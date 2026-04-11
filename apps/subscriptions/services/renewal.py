@@ -166,12 +166,67 @@ class RenewalProcessor:
     # PHASE 2: Create payment record
     # -------------------------------------------------------------------------
 
+    def _get_stored_payment_method(self, payment=None):
+        """
+        Gets stored payment method for renewal.
+
+        If payment provided (resumption/crash recovery): restore from payment metadata.
+        Otherwise (fresh attempt): lookup best available method.
+
+        Priority for fresh lookup:
+        1. Default method (is_default=True, reusable, active)
+        2. Most recently stored reusable method (fallback)
+
+        Raises PaymentDeclined if no suitable method exists.
+        """
+        from payments.models import StoredPaymentMethod
+
+        if payment:
+            # Resumption: restore from payment metadata
+            stored_method_id = payment.metadata.get('stored_method_id')
+            if not stored_method_id:
+                raise PaymentDeclined('Payment missing stored_method_id in metadata.')
+
+            try:
+                return StoredPaymentMethod.objects.get(
+                    id=stored_method_id,
+                    user=self.subscription.user,
+                    is_active=True,
+                )
+            except StoredPaymentMethod.DoesNotExist:
+                raise PaymentDeclined('Stored payment method no longer available.')
+
+        # Fresh lookup: try default first
+        stored_method = StoredPaymentMethod.objects.filter(
+            user=self.subscription.user,
+            is_default=True,
+            is_reusable=True,
+            is_active=True,
+        ).first()
+
+        if not stored_method:
+            # Fall back to most recently stored
+            stored_method = StoredPaymentMethod.objects.filter(
+                user=self.subscription.user,
+                is_reusable=True,
+                is_active=True,
+            ).order_by('-created_at').first()
+
+        if not stored_method:
+            logger.warning(
+                f'No stored payment method for renewal | '
+                f'user={self.subscription.user.id} | sub={self.subscription_id}'
+            )
+            raise PaymentDeclined('No stored payment method available for renewal.')
+
+        return stored_method
+
     def _phase_2_create_payment(self):
         """
         Creates PENDING Payment record before provider call.
 
-        If recovery_point is STARTED, create payment and advance to PAYMENT_CREATED.
-        If already PAYMENT_CREATED (crash recovery), skip creation.
+        If recovery_point is STARTED, lookup stored payment method and create payment.
+        If already PAYMENT_CREATED (crash recovery), restore state from existing payment.
         """
         import uuid
 
@@ -180,9 +235,8 @@ class RenewalProcessor:
 
         if self.idem_key.recovery_point == IdempotencyRecoveryPoint.STARTED:
             with transaction.atomic():
-                # Determine provider from user's stored payment method
-                # TODO: Get from user's stored method once StoredPaymentMethod exists
-                provider = PaymentProvider.PAYSTACK
+                self.stored_method = self._get_stored_payment_method()
+                provider = self.stored_method.provider
                 currency = Currency.NGN if provider == PaymentProvider.PAYSTACK else Currency.USD
 
                 self.payment = Payment.objects.create(
@@ -196,13 +250,15 @@ class RenewalProcessor:
                     reference=str(uuid.uuid4()),
                     metadata={
                         'attempt_number': self.next_attempt,
+                        'stored_method_id': str(self.stored_method.id),
                     },
                 )
                 self.idem_key.recovery_point = IdempotencyRecoveryPoint.PAYMENT_CREATED
                 self.idem_key.save(update_fields=['recovery_point'])
         else:
-            # Crash recovery - payment already exists
+            # Crash recovery - restore from existing payment
             self.payment = self.idem_key.payment
+            self.stored_method = self._get_stored_payment_method(self.payment)
 
     # -------------------------------------------------------------------------
     # PHASE 3: Call provider
@@ -218,21 +274,24 @@ class RenewalProcessor:
         if not self.payment:
             return
 
-        from payments.services import PaymentService
+        from payments.services.providers.paystack import PaystackProvider
         from notifications.services import NotificationService
 
         try:
-            provider_data = PaymentService.charge_stored_method(
-                user=self.subscription.user,
-                amount=self.amount,
-                reference=self.payment.reference,
-                description=f"Renewal: {self.subscription.plan.name} ({self.subscription.billing_cycle})",
-                idempotency_key=self.key_value,
-                purpose=PaymentPurpose.SUBSCRIPTION,
-                additional_metadata={
-                    'attempt_number': self.next_attempt,
-                },
-            )
+            # Use stored method from Phase 2 to charge via provider
+            if self.stored_method.provider == PaymentProvider.PAYSTACK:
+                provider_data = PaystackProvider.charge_authorization(
+                    authorization_code=self.stored_method.authorization_code,
+                    email=self.stored_method.billing_email,
+                    amount=self.amount,
+                    reference=self.payment.reference,
+                    purpose=PaymentPurpose.SUBSCRIPTION,
+                    metadata={
+                        'attempt_number': self.next_attempt,
+                    },
+                )
+            else:
+                raise PaymentDeclined(f'Provider {self.stored_method.provider} not supported for stored charges.')
 
             # Provider accepted the charge - finalize
             self._finalize(

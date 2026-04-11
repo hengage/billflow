@@ -304,7 +304,7 @@ class WebhookHandler:
         if not storable:
             return
 
-        StoredPaymentMethod.objects.get_or_create(
+        stored_method, created = StoredPaymentMethod.objects.get_or_create(
             user=payment.user,
             signature=storable.signature,
             provider=provider,
@@ -321,6 +321,18 @@ class WebhookHandler:
                 'is_reusable': True,
             }
         )
+
+        # Auto-set first card as default — with locking to prevent race conditions
+        if created:
+            with transaction.atomic():
+                existing = StoredPaymentMethod.objects.select_for_update().filter(
+                    user=payment.user,
+                    is_active=True,
+                ).exclude(id=stored_method.id).exists()
+
+                if not existing:
+                    stored_method.is_default = True
+                    stored_method.save(update_fields=['is_default'])
 
     # -------------------------------------------------------------------------
     # Downstream activation helpers

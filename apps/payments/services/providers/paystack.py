@@ -178,3 +178,62 @@ class PaystackProvider:
             bank=authorization.get('bank', ''),
             card_type=authorization.get('card_type', ''),
         )
+
+    @classmethod
+    def charge_authorization(cls, authorization_code, email, amount, reference, purpose, metadata=None):
+        """
+        Charges a stored authorization code for recurring payments.
+        Used by RenewalProcessor for subscription auto-renewal.
+
+        Endpoint: POST /transaction/charge_authorization
+        Reference: https://paystack.com/docs/payments/recurring-charges/
+        """
+        from api_response.exceptions import PaymentDeclined
+
+        payload = {
+            'authorization_code': authorization_code,
+            'email': email,  # Must be the email used when the authorization was created
+            'amount': to_minor(amount),
+            'reference': reference,
+            'metadata': {
+                'purpose': purpose,
+                **(metadata or {}),
+            },
+        }
+
+        try:
+            response = requests.post(
+                f'{cls.BASE_URL}/transaction/charge_authorization',
+                json=payload,
+                headers=cls._get_headers(),
+                timeout=30,
+            )
+        except requests.exceptions.RequestException as exc:
+            logger.error(
+                f'Paystack charge_authorization connection error | ref={reference} | error={str(exc)}'
+            )
+            raise ThirdPartyServiceError()
+
+        if response.status_code in PAYSTACK_NON_RETRYABLE_STATUS_CODES:
+            error_message = response.json().get('message', 'Card declined.')
+            logger.warning(
+                f'Paystack charge_authorization declined | ref={reference} | '
+                f'status={response.status_code} | message={error_message}'
+            )
+            raise PaymentDeclined(error_message)
+
+        if response.status_code >= 500:
+            logger.error(
+                f'Paystack charge_authorization server error | ref={reference} | '
+                f'status={response.status_code}'
+            )
+            raise ThirdPartyServiceError()
+
+        data = response.json()
+        if not data.get('status'):
+            raise PaymentDeclined(data.get('message', 'Charge failed.'))
+
+        return {
+            'provider_ref': data['data']['reference'],
+            'status': data['data']['status'],
+        }
