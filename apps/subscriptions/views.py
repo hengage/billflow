@@ -10,7 +10,6 @@ from payments.constants import Currency, PaymentPurpose
 from .models import Plan, Subscription
 from .serializers import (
     PlanSerializer,
-    PlanCreateSerializer,
     SubscriptionSerializer,
     SubscribeSerializer,
 )
@@ -24,19 +23,14 @@ from .constants import (
 logger = logging.getLogger(__name__)
 
 
-class PlanListCreateView(APIView):
+class PlanListView(APIView):
     """
     GET  /api/subscriptions/plans/       — list active plans (cached 30 min)
-    POST /api/subscriptions/plans/       — create plan (admin only)
-
     GET supports ?currency=USD to return prices converted to USD.
     USD conversion uses the cached exchange rate — never a live API call.
     """
 
-    def get_permissions(self):
-        if self.request.method == 'POST':
-            return [IsAdmin()]
-        return [IsAuthenticated()]
+    permission_classes = (IsAuthenticated,)
 
     def get(self, request):
         currency = request.query_params.get('currency', Currency.NGN).upper()
@@ -59,16 +53,6 @@ class PlanListCreateView(APIView):
         cache.set(cache_key, data, timeout=PLANS_LIST_CACHE_TTL)
         return success(data=data, message='Plans retrieved.')
 
-    def post(self, request):
-        serializer = PlanCreateSerializer(data=request.data)
-        if serializer.is_valid():
-            plan = serializer.save()
-            return created(
-                data=PlanSerializer(plan).data,
-                message='Plan created successfully.',
-            )
-        return fail(message='Validation failed.', error=serializer.errors)
-
     @staticmethod
     def _convert_to_usd(plans_data):
         """
@@ -86,56 +70,6 @@ class PlanListCreateView(APIView):
             # Todo: implement fallback mechanism
             logger.error(f'Failed to convert prices to USD: {traceback.format_exc()}')
         return plans_data
-
-
-class PlanDetailView(APIView):
-    """
-    GET    /api/subscriptions/plans/<id>/  — plan detail
-    PATCH  /api/subscriptions/plans/<id>/  — update plan (admin only)
-    DELETE /api/subscriptions/plans/<id>/  — delete plan (admin only)
-    """
-
-    def get_permissions(self):
-        if self.request.method in ('PATCH', 'DELETE'):
-            return [IsAdmin()]
-        return [IsAuthenticated()]
-
-    def _get_plan(self, pk):
-        try:
-            return Plan.objects.get(id=pk)
-        except Plan.DoesNotExist:
-            return None
-
-    def get(self, request, pk):
-        plan = self._get_plan(pk)
-        if not plan:
-            return fail(message='Plan not found.', status_code=status.HTTP_404_NOT_FOUND)
-        return success(data=PlanSerializer(plan).data, message='Plan retrieved.')
-
-    def patch(self, request, pk):
-        plan = self._get_plan(pk)
-        if not plan:
-            return fail(message='Plan not found.', status_code=status.HTTP_404_NOT_FOUND)
-
-        serializer = PlanCreateSerializer(plan, data=request.data, partial=True)
-        if serializer.is_valid():
-            plan = serializer.save()
-            return success(
-                data=PlanSerializer(plan).data,
-                message='Plan updated successfully.',
-            )
-        return fail(message='Validation failed.', error=serializer.errors)
-
-    def delete(self, request, pk):
-        plan = self._get_plan(pk)
-        if not plan:
-            return fail(message='Plan not found.', status_code=status.HTTP_404_NOT_FOUND)
-
-        # Soft delete — mark inactive rather than hard delete
-        # Hard delete would fail if any Subscription references this plan (PROTECT)
-        plan.is_active = False
-        plan.save(update_fields=['is_active'])
-        return success(message='Plan deactivated successfully.')
 
 
 class SubscribeView(APIView):

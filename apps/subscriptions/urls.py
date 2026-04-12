@@ -1,7 +1,6 @@
 from django.urls import path
 from .views import (
-    PlanListCreateView,
-    PlanDetailView,
+    PlanListView,
     SubscribeView,
     MySubscriptionView,
     CancelSubscriptionView,
@@ -9,8 +8,7 @@ from .views import (
 )
 
 urlpatterns = [
-    path('plans/', PlanListCreateView.as_view(), name='plan-list-create'),
-    path('plans/<uuid:pk>/', PlanDetailView.as_view(), name='plan-detail'),
+    path('plans/', PlanListView.as_view(), name='plan-list'),
     path('', SubscribeView.as_view(), name='subscribe'),
     path('me/', MySubscriptionView.as_view(), name='my-subscription'),
     path('cancel/', CancelSubscriptionView.as_view(), name='cancel-subscription'),
