@@ -382,21 +382,28 @@ class WebhookHandler:
     def _renew_subscription(payment, metadata):
         """
         Renews a subscription after a successful renewal payment.
-        Finds the active subscription and renews it via SubscriptionService.renew().
+        Looks up subscription by ID from payment metadata.
         """
         from subscriptions.services import SubscriptionService
         from subscriptions.models import Subscription
 
-        # Find the active subscription to renew
+        subscription_id = metadata.get('subscription_id')
+        if not subscription_id:
+            logger.error(
+                f'Renewal payment missing subscription_id in metadata | '
+                f'payment={payment.id}'
+            )
+            return
+
         old_subscription = Subscription.objects.filter(
-            user=payment.user,
+            id=subscription_id,
             status=Subscription.Status.ACTIVE,
         ).select_related('plan').first()
 
         if not old_subscription:
             logger.error(
-                f'Renewal payment but no active subscription found | '
-                f'payment={payment.id} | user={payment.user.id}'
+                f'Renewal payment but subscription not found or not active | '
+                f'payment={payment.id} | subscription_id={subscription_id}'
             )
             return
 

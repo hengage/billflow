@@ -260,6 +260,7 @@ class RenewalProcessor:
                     metadata={
                         'attempt_number': self.next_attempt,
                         'stored_method_id': str(self.stored_method.id),
+                        'subscription_id': str(self.subscription.id),
                     },
                 )
                 self.idem_key.recovery_point = IdempotencyRecoveryPoint.PAYMENT_CREATED
