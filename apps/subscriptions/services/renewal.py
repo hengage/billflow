@@ -273,6 +273,23 @@ class RenewalProcessor:
     # PHASE 3: Call provider
     # -------------------------------------------------------------------------
 
+    @staticmethod
+    def _get_provider_charger(provider):
+        """
+        Strategy pattern: Returns the appropriate charge method for the provider.
+
+        Each provider implements charge_stored(stored_method, amount, reference,
+        purpose, metadata) with a unified interface.
+        """
+        from payments.services.providers.paystack import PaystackProvider
+        from payments.services.providers.stripe import StripeProvider
+
+        chargers = {
+            PaymentProvider.PAYSTACK: PaystackProvider.charge_stored,
+            PaymentProvider.STRIPE: StripeProvider.charge_stored,
+        }
+        return chargers.get(provider)
+
     def _phase_3_call_provider(self):
         """
         Phase 3: Calls payment provider to charge stored method.
@@ -284,24 +301,22 @@ class RenewalProcessor:
         if not self.payment:
             return None
 
-        from payments.services.providers.paystack import PaystackProvider
+        charger = self._get_provider_charger(self.stored_method.provider)
+        if not charger:
+            raise PaymentDeclined(
+                f'Provider {self.stored_method.provider} not supported for stored charges.'
+            )
 
         try:
-            if self.stored_method.provider == PaymentProvider.PAYSTACK:
-                provider_data = PaystackProvider.charge_authorization(
-                    authorization_code=self.stored_method.authorization_code,
-                    email=self.stored_method.billing_email,
-                    amount=self.amount,
-                    reference=self.payment.reference,
-                    purpose=PaymentPurpose.RENEW_SUBSCRIPTION,
-                    metadata={
-                        'attempt_number': self.next_attempt,
-                    },
-                )
-            else:
-                raise PaymentDeclined(
-                    f'Provider {self.stored_method.provider} not supported for stored charges.'
-                )
+            provider_data = charger(
+                stored_method=self.stored_method,
+                amount=self.amount,
+                reference=self.payment.reference,
+                purpose=PaymentPurpose.RENEW_SUBSCRIPTION,
+                metadata={
+                    'attempt_number': self.next_attempt,
+                },
+            )
 
             return {
                 'success': True,

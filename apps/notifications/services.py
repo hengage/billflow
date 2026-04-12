@@ -175,3 +175,46 @@ class NotificationService:
             f'Thank you for using BillFlow.'
         )
         cls._dispatch(user, NotificationType.SUBSCRIPTION_EXPIRED, 'Subscription Expired', message)
+
+    @classmethod
+    def send_subscription_renewed(cls, user, subscription, payment):
+        """
+        Send a subscription renewed notification to the user.
+        Called when auto-renewal succeeds.
+        """
+        message = (
+            f'Hi {user.first_name},\n\n'
+            f'Your {subscription.plan.name} subscription has been automatically renewed.\n'
+            f'Amount charged: {payment.amount} {payment.currency}\n'
+            f'New expiry date: {subscription.end_date}\n\n'
+            f'Thank you for using BillFlow.'
+        )
+        cls._dispatch(
+            user,
+            NotificationType.SUBSCRIPTION_RENEWED,
+            'Subscription Renewed',
+            message
+        )
+
+    @classmethod
+    def send_renewal_failed(cls, user, subscription, attempts_remaining):
+        """
+        Send a renewal failed notification to the user.
+        Called when auto-renewal charge is declined.
+        """
+        message = (
+            f'Hi {user.first_name},\n\n'
+            f'We were unable to automatically renew your {subscription.plan.name} subscription.\n'
+            f'Please update your payment method to avoid service interruption.\n'
+        )
+        if attempts_remaining > 0:
+            message += f'We will retry {attempts_remaining} more time(s).\n\n'
+        else:
+            message += 'This was your final retry. Your subscription will expire soon.\n\n'
+        message += 'Thank you for using BillFlow.'
+        cls._dispatch(
+            user,
+            NotificationType.RENEWAL_FAILED,
+            'Renewal Failed - Action Required',
+            message
+        )

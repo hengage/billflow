@@ -294,9 +294,11 @@ class WebhookHandler:
         """
         from payments.models import StoredPaymentMethod
         from payments.services.providers.paystack import PaystackProvider
+        from payments.services.providers.stripe import StripeProvider
 
         extractors = {
             PaymentProvider.PAYSTACK: PaystackProvider.extract_storable_method,
+            PaymentProvider.STRIPE: StripeProvider.extract_storable_method,
         }
 
         extractor = extractors.get(provider)
@@ -398,11 +400,23 @@ class WebhookHandler:
             )
             return
 
-        SubscriptionService.renew(
+        new_subscription = SubscriptionService.renew(
             old_subscription=old_subscription,
             payment=payment,
         )
+
+        # Notify user of successful renewal
+        from notifications.services import NotificationService
+        transaction.on_commit(
+            lambda: NotificationService.send_subscription_renewed(
+                user=payment.user,
+                subscription=new_subscription,
+                payment=payment,
+            )
+        )
+
         logger.info(
             f'Subscription renewed via webhook | '
-            f'payment={payment.id} | old_sub={old_subscription.id}'
+            f'payment={payment.id} | old_sub={old_subscription.id} | '
+            f'new_sub={new_subscription.id}'
         )

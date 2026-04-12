@@ -237,3 +237,18 @@ class PaystackProvider:
             'provider_ref': data['data']['reference'],
             'status': data['data']['status'],
         }
+
+    @classmethod
+    def charge_stored(cls, stored_method, amount, reference, purpose, metadata=None):
+        """
+        Strategy interface for charging a stored payment method.
+        Delegates to charge_authorization with Paystack-specific field mapping.
+        """
+        return cls.charge_authorization(
+            authorization_code=stored_method.authorization_code,
+            email=stored_method.billing_email,
+            amount=amount,
+            reference=reference,
+            purpose=purpose,
+            metadata=metadata,
+        )
