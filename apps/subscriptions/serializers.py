@@ -7,10 +7,10 @@ class PlanSerializer(serializers.ModelSerializer):
     class Meta:
         model = Plan
         fields = (
-            'id', 'name', 'description', 'price_ngn', 'price_usd',
-            'billing_cycle', 'features', 'is_active', 'created_at',
+            'id', 'name', 'description', 'monthly_price_ngn', 'yearly_price_ngn',
+            'features', 'is_active', 'created_at', 'updated_at',
         )
-        read_only_fields = ('id', 'created_at')
+        read_only_fields = fields
 
 
 class PlanCreateSerializer(serializers.ModelSerializer):
@@ -35,8 +35,9 @@ class SubscriptionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Subscription
         fields = (
-            'id', 'plan', 'status', 'start_date',
-            'end_date', 'created_at',
+            'id', 'plan', 'billing_cycle', 'amount_paid', 'status',
+            'start_date_utc', 'end_date_utc', 'created_at',
+            'renewal_attempts', 'last_renewal_attempt_at',
         )
         read_only_fields = fields
 

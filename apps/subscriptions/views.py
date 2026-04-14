@@ -5,7 +5,6 @@ from rest_framework import status
 from django.core.cache import cache
 
 from api_response.helpers import success, fail, created
-from users.permissions import IsAdmin
 from payments.constants import Currency, PaymentPurpose
 from .models import Plan, Subscription
 from .serializers import (
@@ -14,6 +13,12 @@ from .serializers import (
     SubscribeSerializer,
 )
 from .services import SubscriptionService
+from .api_schema import (
+    plan_list_schema,
+    subscribe_schema,
+    my_subscription_schema,
+    cancel_subscription_schema,
+)
 from .constants import (
     PLANS_LIST_CACHE_KEY,
     PLANS_LIST_CACHE_TTL,
@@ -23,6 +28,7 @@ from .constants import (
 logger = logging.getLogger(__name__)
 
 
+@plan_list_schema
 class PlanListView(APIView):
     """
     GET  /api/subscriptions/plans/       — list active plans (cached 30 min)
@@ -67,11 +73,11 @@ class PlanListView(APIView):
                 plan['yearly_price_usd'] = round(float(plan['yearly_price_ngn']) * rate, 2)
         except Exception:
             import traceback
-            # Todo: implement fallback mechanism
             logger.error(f'Failed to convert prices to USD: {traceback.format_exc()}')
         return plans_data
 
 
+@subscribe_schema
 class SubscribeView(APIView):
     """
     POST /api/subscriptions/
@@ -141,12 +147,14 @@ class SubscribeView(APIView):
         from payments.services.processor import PaymentProcessor, ConflictError
         from payments.constants import PaymentPurpose
 
+        billing_cycle = validated_data['billing_cycle']
+        amount = plan.monthly_price_ngn if billing_cycle == 'monthly' else plan.yearly_price_ngn
         request_params = {
-            'amount': str(plan.price_ngn),
+            'amount': str(amount),
             'provider': validated_data['provider'],
             'purpose': PaymentPurpose.SUBSCRIPTION,
             'plan_id': str(plan.id),
-            'billing_cycle': validated_data['billing_cycle'],
+            'billing_cycle': billing_cycle,
         }
 
         processor = PaymentProcessor(
@@ -166,6 +174,7 @@ class SubscribeView(APIView):
             return fail(message=str(exc), status_code=status.HTTP_409_CONFLICT)
 
 
+@my_subscription_schema
 class MySubscriptionView(APIView):
     """GET /api/subscriptions/me/"""
     permission_classes = (IsAuthenticated,)
@@ -180,6 +189,7 @@ class MySubscriptionView(APIView):
         )
 
 
+@cancel_subscription_schema
 class CancelSubscriptionView(APIView):
     """POST /api/subscriptions/cancel/"""
     permission_classes = (IsAuthenticated,)
@@ -193,15 +203,3 @@ class CancelSubscriptionView(APIView):
             )
         except ValueError as exc:
             return fail(message=str(exc), status_code=status.HTTP_400_BAD_REQUEST)
-
-
-class AdminSubscriptionListView(APIView):
-    """GET /api/subscriptions/ — admin only"""
-    permission_classes = (IsAdmin,)
-
-    def get(self, request):
-        subscriptions = Subscription.objects.select_related(
-            'user', 'plan'
-        ).all()
-        serializer = SubscriptionSerializer(subscriptions, many=True)
-        return success(data=serializer.data, message='Subscriptions retrieved.')
