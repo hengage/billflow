@@ -175,7 +175,8 @@ class SubscriptionService:
                 raise ValueError('No active subscription found.')
 
             subscription.status = Subscription.Status.CANCELLED
-            subscription.save(update_fields=['status'])
+            subscription.cancelled_at = timezone.now()
+            subscription.save(update_fields=['status', 'cancelled_at'])
 
         # Invalidate cache
         cache_key = f'{USER_SUBSCRIPTION_CACHE_KEY_PREFIX}_{user.id}'

@@ -27,7 +27,7 @@ plan_list_schema = extend_schema(
     ],
     responses={
         200: OpenApiResponse(
-            response=create_success_envelope(PlanSerializer),
+            response=create_success_envelope(PlanSerializer, many=True),
             description='List of active plans retrieved.',
         ),
         401: OpenApiResponse(description='Authentication required.'),

@@ -79,6 +79,9 @@ class Subscription(models.Model):
     renewal_attempts = models.PositiveSmallIntegerField(default=0)
     last_renewal_attempt_at = models.DateTimeField(null=True, blank=True)
 
+    # Cancellation tracking
+    cancelled_at = models.DateTimeField(null=True, blank=True)
+
     class Meta:
         ordering = ['-created_at']
         indexes = [
