@@ -26,7 +26,7 @@ class Plan(models.Model):
         ordering = ['monthly_price_ngn']
 
     def __str__(self):
-        return f'{self.name} — NGN {self.monthly_price_ngn}/month | NGN {self.yearly_price_ngn}/year'
+        return f'{self.name} — NGN {self.monthly_price_ngn:,.2f}/month | NGN {self.yearly_price_ngn:,.2f}/year'
 
 
 class Subscription(models.Model):
