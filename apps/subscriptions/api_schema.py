@@ -47,6 +47,15 @@ subscribe_schema = extend_schema(
         'Requires X-Idempotency-Key header for direct payments.'
     ),
     request=SubscribeSerializer,
+    parameters=[
+        OpenApiParameter(
+            name='X-Idempotency-Key',
+            type=str,
+            location=OpenApiParameter.HEADER,
+            description='Unique key for idempotent direct payment requests. Required when payment_method=direct.',
+            required=False,
+        ),
+    ],
     responses={
         201: OpenApiResponse(
             response=create_success_envelope(SubscriptionSerializer),
@@ -101,6 +110,15 @@ switch_plan_schema = extend_schema(
         'Requires X-Idempotency-Key header for direct payments.'
     ),
     request=SwitchPlanSerializer,
+    parameters=[
+        OpenApiParameter(
+            name='X-Idempotency-Key',
+            type=str,
+            location=OpenApiParameter.HEADER,
+            description='Unique key for idempotent direct payment requests. Required when payment_method=direct.',
+            required=False,
+        ),
+    ],
     responses={
         201: OpenApiResponse(
             response=create_success_envelope(SubscriptionSerializer),
