@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import IdempotencyKey, Payment, WebhookLog
+from .models import IdempotencyKey, Payment, WebhookLog, StoredPaymentMethod
 
 
 @admin.register(IdempotencyKey)
@@ -34,6 +34,20 @@ class WebhookLogAdmin(admin.ModelAdmin):
     list_filter = ('provider', 'processed', 'permanently_failed')
     search_fields = ('reference', 'event_type')
     readonly_fields = ('id', 'provider', 'event_type', 'reference', 'payload', 'received_at', 'failure_reason')
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(StoredPaymentMethod)
+class StoredPaymentMethodAdmin(admin.ModelAdmin):
+    list_display = ('user', 'provider', 'last_four', 'card_brand', 'exp_month', 'exp_year', 'is_default', 'is_active')
+    list_filter = ('provider', 'is_active', 'is_default', 'card_brand')
+    search_fields = ('user__email', 'last_four', 'billing_email')
+    readonly_fields = ('id', 'authorization_code', 'provider_customer_id', 'signature', 'created_at', 'updated_at')
 
     def has_add_permission(self, request):
         return False
