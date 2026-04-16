@@ -17,11 +17,11 @@ class PlanAdmin(admin.ModelAdmin):
     list_display = ('name', 'monthly_price_ngn', 'yearly_price_ngn', 'is_active', 'subscription_count', 'created_at')
     list_filter = ('is_active',)
     search_fields = ('name', 'description')
-    readonly_fields = ('created_at', 'updated_at')
+    readonly_fields = ('id', 'created_at', 'updated_at')
     inlines = [SubscriptionInline]
     fieldsets = (
         ('Basic Info', {
-            'fields': ('name', 'description', 'is_active')
+            'fields': ('id', 'name', 'description', 'is_active')
         }),
         ('Pricing', {
             'fields': ('monthly_price_ngn', 'yearly_price_ngn')
@@ -49,7 +49,7 @@ class SubscriptionAdmin(admin.ModelAdmin):
     list_display = ('user', 'plan_link', 'billing_cycle', 'status', 'start_date_utc', 'end_date_utc', 'cancelled_at')
     list_filter = ('status', 'billing_cycle', 'plan')
     search_fields = ('user__email', 'user__first_name', 'user__last_name', 'plan__name')
-    readonly_fields = ('created_at', 'renewal_attempts', 'last_renewal_attempt_at', 'plan_link')
+    readonly_fields = ('id', 'user', 'created_at', 'renewal_attempts', 'last_renewal_attempt_at', 'plan_link')
     raw_id_fields = ('user',)  # Makes user searchable with popup
 
     def plan_link(self, obj):
@@ -59,7 +59,7 @@ class SubscriptionAdmin(admin.ModelAdmin):
 
     fieldsets = (
         ('User & Plan', {
-            'fields': ('user', 'plan_link', 'plan', 'billing_cycle')
+            'fields': ('id', 'user', 'plan_link', 'plan', 'billing_cycle')
         }),
         ('Status & Dates', {
             'fields': ('status', 'start_date_utc', 'end_date_utc', 'cancelled_at')
