@@ -30,9 +30,10 @@ class PaymentAdmin(admin.ModelAdmin):
 
 @admin.register(WebhookLog)
 class WebhookLogAdmin(admin.ModelAdmin):
-    list_display = ('provider', 'event_type', 'processed', 'received_at')
+    list_display = ('provider', 'event_type', 'reference', 'processed', 'received_at')
     list_filter = ('provider', 'processed', 'permanently_failed')
-    readonly_fields = ('id', 'provider', 'event_type', 'payload', 'received_at', 'failure_reason')
+    search_fields = ('reference', 'event_type')
+    readonly_fields = ('id', 'provider', 'event_type', 'reference', 'payload', 'received_at', 'failure_reason')
 
     def has_add_permission(self, request):
         return False

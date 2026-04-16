@@ -118,12 +118,13 @@ class WebhookLog(models.Model):
     Immutable audit trail of every incoming webhook event.
 
     Written BEFORE any processing — if processing fails, the raw payload
-    is here to inspect, debug, and replay. The processed flag tells us
+    is here to inspect, debug, and replay. The processed flag tells
     which events were handled successfully and which need attention.
     """
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     provider = models.CharField(max_length=20, choices=PaymentProvider.choices)
     event_type = models.CharField(max_length=100)
+    reference = models.CharField(max_length=255, blank=True)
     payload = models.JSONField()
     received_at = models.DateTimeField(auto_now_add=True)
     processed = models.BooleanField(default=False)
@@ -132,9 +133,19 @@ class WebhookLog(models.Model):
 
     class Meta:
         ordering = ['-received_at']
+        indexes = [
+            models.Index(fields=['reference', 'received_at']),
+        ]
+
+    def save(self, *args, **kwargs):
+        # Auto-extract reference from payload before saving
+        if not self.reference and self.payload:
+            data = self.payload.get('data', {})
+            self.reference = data.get('reference', '')
+        super().save(*args, **kwargs)
 
     def __str__(self):
-        return f'{self.provider} | {self.event_type} | processed={self.processed}'
+        return f'{self.provider} | {self.event_type} | ref={self.reference or "N/A"} | processed={self.processed}'
 
 
 class StoredPaymentMethod(models.Model):
