@@ -65,3 +65,29 @@ class SubscribeSerializer(serializers.Serializer):
                 {'provider': 'provider is required for direct payments.'}
             )
         return attrs
+
+
+class SwitchPlanSerializer(serializers.Serializer):
+    """
+    Validates a plan switch request.
+    """
+    plan_id = serializers.UUIDField()
+    billing_cycle = serializers.ChoiceField(
+        choices=Subscription.BillingCycle.choices
+    )
+    payment_method = serializers.ChoiceField(
+        choices=[PaymentMethod.WALLET, PaymentMethod.DIRECT]
+    )
+    # Only required when payment_method is DIRECT
+    provider = serializers.ChoiceField(
+        choices=['paystack', 'stripe'],
+        required=False,
+    )
+    return_url = serializers.URLField(required=False)
+
+    def validate(self, attrs):
+        if attrs['payment_method'] == PaymentMethod.DIRECT and not attrs.get('provider'):
+            raise serializers.ValidationError(
+                {'provider': 'provider is required for direct payments.'}
+            )
+        return attrs

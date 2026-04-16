@@ -231,6 +231,9 @@ class WebhookHandler:
             elif payment.purpose == PaymentPurpose.RENEW_SUBSCRIPTION:
                 cls._renew_subscription(payment, metadata)
 
+            elif payment.purpose == PaymentPurpose.SWITCH_PLAN:
+                cls._switch_plan(payment, metadata)
+
             # Store authorization for recurring charges if applicable
             cls._store_payment_method_if_applicable(payment, raw_data, provider)
 
@@ -426,4 +429,53 @@ class WebhookHandler:
             f'Subscription renewed via webhook | '
             f'payment={payment.id} | old_sub={old_subscription.id} | '
             f'new_sub={new_subscription.id}'
+        )
+
+    @staticmethod
+    def _switch_plan(payment, metadata):
+        """
+        Switches plan after successful payment.
+        plan_id and billing_cycle stored in payment metadata at initiation.
+        """
+        from subscriptions.services import SubscriptionService
+        from subscriptions.models import Plan
+
+        plan_id = metadata.get('plan_id')
+        billing_cycle = metadata.get('billing_cycle')
+
+        if not plan_id or not billing_cycle:
+            logger.error(
+                f'Switch plan payment missing metadata | '
+                f'payment={payment.id} | plan_id={plan_id} | billing_cycle={billing_cycle}'
+            )
+            return
+
+        try:
+            plan = Plan.objects.get(id=plan_id)
+        except Plan.DoesNotExist:
+            logger.error(
+                f'Switch plan payment but plan not found | '
+                f'payment={payment.id} | plan_id={plan_id}'
+            )
+            return
+
+        subscription = SubscriptionService.switch_plan(
+            user=payment.user,
+            new_plan=plan,
+            billing_cycle=billing_cycle,
+            payment=payment,
+        )
+
+        # Notify user of successful plan switch
+        from notifications.services import NotificationService
+        transaction.on_commit(
+            lambda: NotificationService.send_subscription_activated(
+                user=payment.user,
+                plan=plan,
+            )
+        )
+
+        logger.info(
+            f'Plan switched via webhook | '
+            f'payment={payment.id} | new_sub={subscription.id} | plan={plan.name}'
         )

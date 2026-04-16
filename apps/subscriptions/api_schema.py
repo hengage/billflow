@@ -5,6 +5,7 @@ from .serializers import (
     PlanSerializer,
     SubscriptionSerializer,
     SubscribeSerializer,
+    SwitchPlanSerializer,
 )
 
 
@@ -84,6 +85,31 @@ cancel_subscription_schema = extend_schema(
         ),
         400: OpenApiResponse(description='No active subscription to cancel.'),
         401: OpenApiResponse(description='Authentication required.'),
+    },
+    tags=['Subscriptions'],
+)
+
+
+switch_plan_schema = extend_schema(
+    summary='Switch to a different plan',
+    description=(
+        'Switches to a different plan immediately. '
+        'Cancels current subscription and creates new one with full billing cycle. '
+        'Two payment flows: '
+        '1) wallet - deducts from wallet balance immediately. '
+        '2) direct - initiates Paystack/Stripe payment, switches on webhook confirmation. '
+        'Requires X-Idempotency-Key header for direct payments.'
+    ),
+    request=SwitchPlanSerializer,
+    responses={
+        201: OpenApiResponse(
+            response=create_success_envelope(SubscriptionSerializer),
+            description='Plan switched (wallet) or payment initiated (direct).',
+        ),
+        400: OpenApiResponse(description='Validation failed or cannot switch to same plan.'),
+        401: OpenApiResponse(description='Authentication required.'),
+        404: OpenApiResponse(description='Plan not found or inactive.'),
+        409: OpenApiResponse(description='Conflict - request already being processed.'),
     },
     tags=['Subscriptions'],
 )

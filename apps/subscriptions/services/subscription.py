@@ -161,6 +161,53 @@ class SubscriptionService:
         return subscription
 
     @staticmethod
+    def switch_plan_via_wallet(user, new_plan, billing_cycle):
+        """
+        Switches plan using wallet balance.
+        Deducts from wallet, cancels old subscription, creates new one.
+
+        Args:
+            user: User instance
+            new_plan: Plan instance to switch to
+            billing_cycle: MONTHLY or YEARLY
+
+        Returns:
+            New Subscription instance
+
+        Raises:
+            ValueError if insufficient balance or same plan
+        """
+        from wallets.service import WalletService
+        import uuid
+
+        reference = str(uuid.uuid4())
+
+        # Calculate amount based on billing cycle
+        if billing_cycle == Subscription.BillingCycle.MONTHLY:
+            amount = new_plan.monthly_price_ngn
+        else:
+            amount = new_plan.yearly_price_ngn
+
+        with transaction.atomic():
+            # WalletService.deduct() handles the atomic balance check and deduction.
+            WalletService.deduct(
+                user=user,
+                amount=amount,
+                reference=reference,
+                description=f'Plan switch to {new_plan.name} ({billing_cycle})',
+            )
+
+            # Deduction succeeded - switch the plan.
+            subscription = SubscriptionService.switch_plan(
+                user=user,
+                new_plan=new_plan,
+                billing_cycle=billing_cycle,
+                payment=None,
+            )
+
+        return subscription
+
+    @staticmethod
     def cancel(user):
         """
         Cancels the user's active subscription.
@@ -196,6 +243,72 @@ class SubscriptionService:
             f'subscription={subscription.id}'
         )
         return subscription
+
+    @staticmethod
+    def switch_plan(user, new_plan, billing_cycle, payment=None):
+        """
+        Switches user to a different plan.
+        Cancels current subscription immediately and creates new one.
+
+        Args:
+            user: User instance
+            new_plan: Plan instance to switch to
+            billing_cycle: MONTHLY or YEARLY
+            payment: Optional Payment instance (for wallet payments)
+
+        Returns:
+            New Subscription instance
+
+        Raises:
+            ValueError if no active subscription or same plan
+        """
+        with transaction.atomic():
+            # Get and cancel existing subscription
+            existing = Subscription.objects.select_for_update().filter(
+                user=user,
+                status=Subscription.Status.ACTIVE,
+            ).first()
+
+            if not existing:
+                raise ValueError('No active subscription to switch from.')
+
+            if str(existing.plan_id) == str(new_plan.id):
+                raise ValueError('Cannot switch to the same plan. Use renewal instead.')
+
+            # Cancel existing immediately
+            existing.status = Subscription.Status.CANCELLED
+            existing.cancelled_at = timezone.now()
+            existing.save(update_fields=['status', 'cancelled_at'])
+
+            # Create new subscription
+            today = timezone.now()
+            if billing_cycle == Subscription.BillingCycle.MONTHLY:
+                end_date = today + timedelta(days=30)
+                amount = new_plan.monthly_price_ngn
+            else:
+                end_date = today + timedelta(days=365)
+                amount = new_plan.yearly_price_ngn
+
+            new_subscription = Subscription.objects.create(
+                user=user,
+                plan=new_plan,
+                billing_cycle=billing_cycle,
+                amount_paid=amount,
+                status=Subscription.Status.ACTIVE,
+                start_date_utc=today,
+                end_date_utc=end_date,
+                payment=payment,
+            )
+
+        # Invalidate cache
+        cache_key = f'{USER_SUBSCRIPTION_CACHE_KEY_PREFIX}_{user.id}'
+        cache.delete(cache_key)
+
+        logger.info(
+            f'Plan switched | user={user.id} | old_plan={existing.plan_id} | '
+            f'new_plan={new_plan.id} | old_sub={existing.id} | new_sub={new_subscription.id}'
+        )
+        return new_subscription
 
     @staticmethod
     def can_renew(user, plan_id):

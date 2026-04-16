@@ -11,6 +11,7 @@ from .serializers import (
     PlanSerializer,
     SubscriptionSerializer,
     SubscribeSerializer,
+    SwitchPlanSerializer,
 )
 from .services import SubscriptionService
 from .api_schema import (
@@ -18,6 +19,7 @@ from .api_schema import (
     subscribe_schema,
     my_subscription_schema,
     cancel_subscription_schema,
+    switch_plan_schema,
 )
 from .constants import (
     PLANS_LIST_CACHE_KEY,
@@ -171,11 +173,11 @@ class SubscribeView(APIView):
         from payments.constants import PaymentPurpose
 
         billing_cycle = validated_data['billing_cycle']
-        amount = plan.monthly_price_ngn if billing_cycle == 'monthly' else plan.yearly_price_ngn
+        amount = plan.monthly_price_ngn if billing_cycle == Subscription.BillingCycle.MONTHLY else plan.yearly_price_ngn
         request_params = {
             'amount': str(amount),
             'provider': validated_data['provider'],
-            'purpose': PaymentPurpose.SUBSCRIPTION,
+            'purpose': PaymentPurpose.SUBSCRIPTION.value,
             'plan_id': str(plan.id),
             'billing_cycle': billing_cycle,
         }
@@ -226,3 +228,104 @@ class CancelSubscriptionView(APIView):
             )
         except ValueError as exc:
             return fail(message=str(exc), status_code=status.HTTP_400_BAD_REQUEST)
+
+
+@switch_plan_schema
+class SwitchPlanView(APIView):
+    """POST /api/subscriptions/switch-plan/
+
+    Switches user to a different plan immediately.
+    Cancels current subscription and creates new one with full billing cycle.
+    Supports wallet (immediate) or direct payment (webhook activation).
+    """
+    permission_classes = (IsAuthenticated,)
+
+    def post(self, request):
+        serializer = SwitchPlanSerializer(data=request.data)
+        if not serializer.is_valid():
+            return fail(message='Validation failed.', error=serializer.errors)
+
+        plan_id = serializer.validated_data['plan_id']
+        billing_cycle = serializer.validated_data['billing_cycle']
+        payment_method = serializer.validated_data['payment_method']
+
+        try:
+            plan = Plan.objects.get(id=plan_id, is_active=True)
+        except Plan.DoesNotExist:
+            return fail(
+                message='Plan not found or inactive.',
+                status_code=status.HTTP_404_NOT_FOUND,
+            )
+
+        if payment_method == PaymentMethod.WALLET:
+            return self._handle_wallet_switch(request.user, plan, billing_cycle)
+
+        return self._handle_direct_switch(request, plan, serializer.validated_data)
+
+    def _handle_wallet_switch(self, user, plan, billing_cycle):
+        try:
+            subscription = SubscriptionService.switch_plan_via_wallet(
+                user=user,
+                new_plan=plan,
+                billing_cycle=billing_cycle,
+            )
+
+            # Queue notification after successful switch
+            from django.db import transaction
+            from notifications.services import NotificationService
+            transaction.on_commit(
+                lambda: NotificationService.send_subscription_activated(user, plan)
+            )
+
+            return created(
+                data=SubscriptionSerializer(subscription).data,
+                message='Plan switched successfully.',
+            )
+        except ValueError as exc:
+            return fail(
+                message=str(exc),
+                error={'detail': str(exc)},
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
+
+    def _handle_direct_switch(self, request, plan, validated_data):
+        """
+        Initiates payment for plan switch.
+        Uses PaymentProcessor with SWITCH_PLAN purpose so webhook calls switch_plan.
+        """
+        billing_cycle = validated_data['billing_cycle']
+
+        idempotency_key = request.headers.get('X-Idempotency-Key')
+        if not idempotency_key:
+            return fail(
+                message='X-Idempotency-Key header is required for direct payments.',
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
+
+        from payments.services.processor import PaymentProcessor, ConflictError
+        from payments.constants import PaymentPurpose
+
+        amount = plan.monthly_price_ngn if billing_cycle == Subscription.BillingCycle.MONTHLY else plan.yearly_price_ngn
+        request_params = {
+            'amount': str(amount),
+            'provider': validated_data['provider'],
+            'purpose': PaymentPurpose.SWITCH_PLAN,
+            'plan_id': str(plan.id),
+            'billing_cycle': billing_cycle,
+        }
+
+        processor = PaymentProcessor(
+            user=request.user,
+            idempotency_key_value=idempotency_key,
+            request_path=request.path,
+            request_params=request_params,
+        )
+
+        try:
+            response_body, response_code = processor.execute()
+            return success(
+                data=response_body,
+                message='Payment initiated. Plan will switch on payment confirmation.',
+            )
+        except ConflictError as exc:
+            return fail(message=str(exc), status_code=status.HTTP_409_CONFLICT)
