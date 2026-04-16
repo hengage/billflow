@@ -111,6 +111,18 @@ class SubscribeView(APIView):
         return self._handle_direct_payment(request, plan, serializer.validated_data)
 
     def _handle_wallet_payment(self, user, plan, billing_cycle):
+        # Pre-validate renewal eligibility before deducting from wallet
+        can_renew, error_message = SubscriptionService.can_renew(
+            user=user,
+            plan_id=str(plan.id)
+        )
+        if not can_renew:
+            return fail(
+                message=error_message,
+                error={'detail': error_message},
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
+
         try:
             subscription = SubscriptionService.subscribe_via_wallet(user, plan, billing_cycle)
 
@@ -137,6 +149,17 @@ class SubscribeView(APIView):
         The subscription is NOT activated here — it's activated by the
         webhook handler when the payment succeeds.
         """
+        # Pre-validate renewal eligibility before initiating payment
+        can_renew, error_message = SubscriptionService.can_renew(
+            user=request.user,
+            plan_id=str(plan.id)
+        )
+        if not can_renew:
+            return fail(
+                message=error_message,
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
+
         idempotency_key = request.headers.get('X-Idempotency-Key')
         if not idempotency_key:
             return fail(

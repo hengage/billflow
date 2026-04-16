@@ -58,6 +58,12 @@ PAYMENT_MESSAGES = {
     'NOT_FOUND': 'Payment not found.',
 }
 
+# Subscription messages
+SUBSCRIPTION_MESSAGES = {
+    'RENEWAL_TOO_EARLY': 'You have {days_remaining} days remaining. You can renew when 7 or fewer days remain.',
+    'DIFFERENT_PLAN_EXISTS': 'You already have an active {plan_name} subscription. Use the change plan option to switch to a different plan.',
+}
+
 
 def get_message(key, category='VALIDATION', **kwargs):
     """
@@ -81,6 +87,7 @@ def get_message(key, category='VALIDATION', **kwargs):
         'NOTIFICATION': NOTIFICATION_MESSAGES,
         'AUTH': AUTH_MESSAGES,
         'PAYMENT': PAYMENT_MESSAGES,
+        'SUBSCRIPTION': SUBSCRIPTION_MESSAGES,
     }
     
     message_dict = categories.get(category, VALIDATION_MESSAGES)

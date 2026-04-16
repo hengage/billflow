@@ -14,6 +14,7 @@ from ..constants import (
     USER_SUBSCRIPTION_CACHE_KEY_PREFIX,
     USER_SUBSCRIPTION_CACHE_TTL,
 )
+from utils.messages import get_message
 
 logger = logging.getLogger(__name__)
 
@@ -73,31 +74,39 @@ class SubscriptionService:
             ).first()
 
             if existing:
-                raise ValueError(
-                    f'You already have an active {existing.plan.name} subscription '
-                    f'expiring on {existing.end_date}. '
-                    f'Cancel it before subscribing to a new plan.'
-                )
-
-            today = timezone.now()
-
-            if billing_cycle == Subscription.BillingCycle.MONTHLY:
-                end_date = today + timedelta(days=30)
-                amount = plan.monthly_price_ngn
+                if existing.plan_id == plan.id:
+                    # Same plan = manual renewal with 7-day gate
+                    subscription = SubscriptionService.process_manual_renewal(
+                        existing_subscription=existing,
+                        plan=plan,
+                        billing_cycle=billing_cycle,
+                        payment=payment,
+                    )
+                else:
+                    # Different plan - not handled here, use switch plans option
+                    raise ValueError(
+                        get_message('DIFFERENT_PLAN_EXISTS', 'SUBSCRIPTION', plan_name=existing.plan.name)
+                    )
             else:
-                end_date = today + timedelta(days=365)
-                amount = plan.yearly_price_ngn
+                today = timezone.now()
 
-            subscription = Subscription.objects.create(
-                user=user,
-                plan=plan,
-                billing_cycle=billing_cycle,
-                amount_paid=amount,
-                status=Subscription.Status.ACTIVE,
-                start_date_utc=today,
-                end_date_utc=end_date,
-                payment=payment,
-            )
+                if billing_cycle == Subscription.BillingCycle.MONTHLY:
+                    end_date = today + timedelta(days=30)
+                    amount = plan.monthly_price_ngn
+                else:
+                    end_date = today + timedelta(days=365)
+                    amount = plan.yearly_price_ngn
+
+                subscription = Subscription.objects.create(
+                    user=user,
+                    plan=plan,
+                    billing_cycle=billing_cycle,
+                    amount_paid=amount,
+                    status=Subscription.Status.ACTIVE,
+                    start_date_utc=today,
+                    end_date_utc=end_date,
+                    payment=payment,
+                )
 
         cache_key = f'{USER_SUBSCRIPTION_CACHE_KEY_PREFIX}_{user.id}'
         cache.delete(cache_key)
@@ -187,6 +196,81 @@ class SubscriptionService:
             f'subscription={subscription.id}'
         )
         return subscription
+
+    @staticmethod
+    def can_renew(user, plan_id):
+        """
+        Pre-validates if user can renew an existing subscription.
+        Called before initiating payment to fail fast if renewal not allowed.
+
+        Args:
+            user: User instance
+            plan_id: UUID of the Plan to check
+
+        Returns:
+            tuple: (can_renew: bool, error_message: str or None)
+        """
+        existing = Subscription.objects.only(
+            'plan_id', 'end_date_utc'
+        ).filter(
+            user=user,
+            status=Subscription.Status.ACTIVE,
+        ).first()
+
+        if not existing:
+            # No existing subscription - new subscription is allowed
+            return (True, None)
+
+        if str(existing.plan_id) != str(plan_id):
+            # Different plan - use the switch plans option
+            return (
+                False,
+                get_message('DIFFERENT_PLAN_EXISTS', 'SUBSCRIPTION', plan_name=existing.plan.name)
+            )
+
+        # Same plan - check 7-day gate
+        today = timezone.now()
+        days_remaining = (existing.end_date_utc - today).days
+
+        if days_remaining > 7:
+            return (
+                False,
+                get_message('RENEWAL_TOO_EARLY', 'SUBSCRIPTION', days_remaining=days_remaining)
+            )
+
+        return (True, None)
+
+    @staticmethod
+    def process_manual_renewal(existing_subscription, plan, billing_cycle, payment=None):
+        """
+        Handles user-initiated early renewal with 7-day eligibility gate.
+        Only allows renewal when subscription has 7 or fewer days remaining.
+
+        Args:
+            existing_subscription: Current active Subscription instance
+            plan: Plan instance (same as current)
+            billing_cycle: Billing cycle (monthly or yearly)
+            payment: Payment instance (None for wallet payments)
+
+        Returns:
+            Updated Subscription instance with extended end_date_utc
+
+        """
+        # Extend the subscription
+        if billing_cycle == Subscription.BillingCycle.MONTHLY:
+            existing_subscription.end_date_utc += timedelta(days=30)
+            existing_subscription.amount_paid = plan.monthly_price_ngn
+        else:
+            existing_subscription.end_date_utc += timedelta(days=365)
+            existing_subscription.amount_paid = plan.yearly_price_ngn
+
+        existing_subscription.billing_cycle = billing_cycle
+        existing_subscription.payment = payment
+        existing_subscription.save(update_fields=[
+            'end_date_utc', 'billing_cycle', 'amount_paid', 'payment'
+        ])
+
+        return existing_subscription
 
     @staticmethod
     def expire_subscription(subscription):
