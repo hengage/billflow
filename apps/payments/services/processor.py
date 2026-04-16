@@ -171,10 +171,11 @@ class PaymentProcessor:
 
         This is a deliberately separate transaction from tx1. It commits
         independently, creating a durable checkpoint before we attempt
-        the external provider call. If the server crashes after this but
-        before tx3, a reconciliation job can find PAYMENT_CREATED keys
-        and query the provider to determine what happened.
+        the external provider call. If the server crashes between this and tx4,
+        a reconciliation job can find PAYMENT_CREATED keys and query the provider.
         """
+        from payments.utils import generate_payment_reference
+
         with transaction.atomic():
             Payment.objects.create(
                 user=self.user,
@@ -182,6 +183,7 @@ class PaymentProcessor:
                 currency=PROVIDER_CURRENCY_MAP[self.request_params['provider']],
                 purpose=self.request_params['purpose'],
                 provider=self.request_params['provider'],
+                reference=generate_payment_reference(),
                 idempotency_key=idem_key,
             )
 
@@ -224,7 +226,7 @@ class PaymentProcessor:
             return PaystackProvider.initiate_payment(
                 amount=payment.amount,
                 email=payment.user.email,
-                reference=str(payment.id),
+                reference=payment.reference,
                 purpose=payment.purpose,
                 additional_metadata=additional_metadata,
             )
@@ -233,7 +235,7 @@ class PaymentProcessor:
             return StripeProvider.initiate_payment(
                 amount=payment.amount,
                 email=payment.user.email,
-                reference=str(payment.id),
+                reference=payment.reference,
                 purpose=payment.purpose,
                 additional_metadata=additional_metadata,
             )

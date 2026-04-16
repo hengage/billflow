@@ -197,7 +197,7 @@ class WebhookHandler:
                 # select_for_update locks this Payment row for the duration
                 # of the transaction — prevents concurrent webhook deliveries
                 # for the same event from both trying to process it simultaneously.
-                payment = Payment.objects.select_for_update().get(id=reference)
+                payment = Payment.objects.select_for_update().get(reference=reference)
             except Payment.DoesNotExist:
                 cls._mark_permanently_failed(
                     webhook_log, reference, 'Payment record not found'
@@ -259,7 +259,7 @@ class WebhookHandler:
         """
         with transaction.atomic():
             try:
-                payment = Payment.objects.select_for_update().get(id=reference)
+                payment = Payment.objects.select_for_update().get(reference=reference)
             except Payment.DoesNotExist:
                 cls._mark_permanently_failed(
                     webhook_log, reference, 'Payment record not found'
@@ -365,9 +365,10 @@ class WebhookHandler:
     def _activate_subscription(payment, metadata):
         """
         Activates a subscription after a successful payment.
-        plan_id was stored in the payment metadata at initiation time.
+        plan_id and billing_cycle were stored in the payment metadata at initiation time.
         """
         plan_id = metadata.get('plan_id')
+        billing_cycle = metadata.get('billing_cycle')
         if not plan_id:
             logger.error(
                 f'plan_id missing from payment metadata | payment={payment.id}'
@@ -378,6 +379,7 @@ class WebhookHandler:
         SubscriptionService.activate(
             user=payment.user,
             plan_id=plan_id,
+            billing_cycle=billing_cycle,
             payment=payment,
         )
 

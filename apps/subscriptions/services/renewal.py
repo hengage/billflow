@@ -243,6 +243,8 @@ class RenewalProcessor:
             return
 
         if self.idem_key.recovery_point == IdempotencyRecoveryPoint.STARTED:
+            from payments.utils import generate_payment_reference
+
             with transaction.atomic():
                 self.stored_method = self._get_stored_payment_method()
                 provider = self.stored_method.provider
@@ -256,7 +258,7 @@ class RenewalProcessor:
                     purpose=PaymentPurpose.RENEW_SUBSCRIPTION,
                     status=PaymentStatus.PENDING,
                     idempotency_key=self.idem_key,
-                    reference=str(uuid.uuid4()),
+                    reference=generate_payment_reference(),
                     metadata={
                         'attempt_number': self.next_attempt,
                         'stored_method_id': str(self.stored_method.id),
