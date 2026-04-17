@@ -194,7 +194,6 @@ class SubscriptionService:
                 user=user,
                 amount=amount,
                 reference=reference,
-                description=f'Plan switch to {new_plan.name} ({billing_cycle})',
             )
 
             # Deduction succeeded - switch the plan.

@@ -83,7 +83,6 @@ class SwitchPlanSerializer(serializers.Serializer):
         choices=['paystack', 'stripe'],
         required=False,
     )
-    return_url = serializers.URLField(required=False)
 
     def validate(self, attrs):
         if attrs['payment_method'] == PaymentMethod.DIRECT and not attrs.get('provider'):
