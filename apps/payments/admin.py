@@ -18,10 +18,18 @@ class IdempotencyKeyAdmin(admin.ModelAdmin):
 
 @admin.register(Payment)
 class PaymentAdmin(admin.ModelAdmin):
-    list_display = ('user', 'provider', 'amount', 'currency', 'status', 'purpose', 'created_at')
+    list_display = ('user', 'provider', 'amount', 'currency', 'status', 'purpose', 'created_at_secs', 'updated_at_secs')
     list_filter = ('provider', 'status', 'purpose')
     search_fields = ('user__email', 'reference')
-    readonly_fields = ('id', 'idempotency_key', 'created_at', 'updated_at')
+    readonly_fields = ('id', 'idempotency_key', 'created_at_secs', 'updated_at_secs')
+
+    def created_at_secs(self, obj):
+        return obj.created_at.strftime('%Y-%m-%d %H:%M:%S')
+    created_at_secs.short_description = 'Created at'
+
+    def updated_at_secs(self, obj):
+        return obj.updated_at.strftime('%Y-%m-%d %H:%M:%S')
+    updated_at_secs.short_description = 'Updated at'
 
     def has_delete_permission(self, request, obj=None):
         # Payment records are an immutable audit trail — never delete

@@ -49,7 +49,7 @@ class SubscriptionAdmin(admin.ModelAdmin):
     list_display = ('user', 'plan_link', 'billing_cycle', 'status', 'start_date_utc', 'end_date_utc', 'cancelled_at')
     list_filter = ('status', 'billing_cycle', 'plan')
     search_fields = ('user__email', 'user__first_name', 'user__last_name', 'plan__name')
-    readonly_fields = ('id', 'user', 'created_at', 'renewal_attempts', 'last_renewal_attempt_at', 'plan_link')
+    readonly_fields = ('id', 'user', 'created_at', 'plan_link')
     raw_id_fields = ('user',)  # Makes user searchable with popup
 
     def plan_link(self, obj):

@@ -186,7 +186,7 @@ class NotificationService:
             f'Hi {user.first_name},\n\n'
             f'Your {subscription.plan.name} subscription has been automatically renewed.\n'
             f'Amount charged: {payment.amount} {payment.currency}\n'
-            f'New expiry date: {subscription.end_date}\n\n'
+            f'New expiry date: {subscription.end_date_utc}\n\n'
             f'Thank you for using BillFlow.'
         )
         cls._dispatch(

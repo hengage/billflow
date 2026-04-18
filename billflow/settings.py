@@ -18,6 +18,10 @@ from utils.paths import get_project_root, get_apps_dir
 from decouple import config
 from .logging import LOGGING
 
+TASK_SUBSCRIPTION_DISPATCH_EXPIRIES = "subscriptions.dispatch_expiries"
+TASK_SUBSCRIPTION_DISPATCH_RENEWALS = "subscriptions.dispatch_renewals"
+TASK_SUBSCRIPTION_ATTEMPT_RENEWAL = "subscriptions.attempt_auto_renewal"
+
 # Defines the project's root directory and adds the "apps" subdirectory  
 # to Python's module search path 
 BASE_DIR = get_project_root()
@@ -204,6 +208,8 @@ CELERY_TASK_ROUTES = {
     'payments.tasks.send_payment_success_notification': {'queue': 'notifications'},
     'payments.tasks.send_payment_failed_notification': {'queue': 'notifications'},
     'notifications.tasks.send_email_task': {'queue': 'notifications'},
+    TASK_SUBSCRIPTION_DISPATCH_RENEWALS: {'queue': 'default'},
+    TASK_SUBSCRIPTION_DISPATCH_EXPIRIES: {'queue': 'default'},
 }
 
 # task message is only removed from the queue after
@@ -218,12 +224,12 @@ CELERY_BEAT_SCHEDULE = {
         'schedule': 60,  # every 1 minute (temporary for testing)
     },
     'dispatch-subscription-expiries': {
-        'task': 'subscriptions.dispatch_expiries',
+        'task': TASK_SUBSCRIPTION_DISPATCH_EXPIRIES,
         'schedule': 600.0,  # 10 minutes in seconds
     },
-    'dispatch-renewals-hourly': {
-        'task': 'subscriptions.dispatch_renewals',
-        'schedule': crontab(minute=0),  # Every hour on the hour
+    'dispatch-renewals-every-2-minutes': {
+        'task': TASK_SUBSCRIPTION_DISPATCH_RENEWALS,
+        'schedule': 120.0,  # every 2 minutes (temporary for testing)
     },
 }
 

@@ -218,7 +218,7 @@ class WebhookHandler:
             payment.status = PaymentStatus.SUCCESS
             payment.last_four = last_four
             payment.card_brand = card_brand
-            payment.save(update_fields=['status', 'last_four', 'card_brand', 'updated_at'])
+            payment.save(update_fields=['status', 'last_four', 'card_brand'])
 
             # Trigger the downstream action that this payment was initiated for.
             # The purpose was stored on the Payment record at initiation time,
@@ -273,7 +273,7 @@ class WebhookHandler:
                 return
 
             payment.status = PaymentStatus.FAILED
-            payment.save(update_fields=['status', 'updated_at'])
+            payment.save(update_fields=['status'])
 
             webhook_log.processed = True
             webhook_log.save(update_fields=['processed'])

@@ -4,6 +4,7 @@ from django.utils import timezone
 from django.db import transaction
 from celery import shared_task
 
+from django.conf import settings
 from utils.celery_helpers import backoff_with_jitter, MAX_RETRIES
 
 from django.db.models import Q
@@ -13,11 +14,10 @@ from .models import Subscription
 logger = logging.getLogger(__name__)
 
 
-@shared_task(name="subscriptions.dispatch_expiries")
+@shared_task(name=settings.TASK_SUBSCRIPTION_DISPATCH_EXPIRIES)
 def dispatch_subscription_expiries():
     """
     Finds ACTIVE subscriptions past their end_date and fans them out to workers.
-    Scales to 50k+ because it only pulls IDs, not full objects.
     """
     now = timezone.now()
 
@@ -72,19 +72,21 @@ def process_single_expiry(self, subscription_id):
         raise self.retry(exc=exc, countdown=backoff_with_jitter(self.request.retries))
 
 
-@shared_task(name="subscriptions.dispatch_renewals")
+@shared_task(name=settings.TASK_SUBSCRIPTION_DISPATCH_RENEWALS)
 def dispatch_renewal_attempts(batch_size=500):
     """
-    Runs hourly. Finds subscriptions expiring in 24-48h with:
+    Runs every 2 minutes (testing). Finds subscriptions expiring in 24-48h with:
     - Status ACTIVE (RENEWED ones already handled)
     - Under 3 renewal attempts
     - Respects cooldown: 6h after 1st attempt, 24h after 2nd
 
     Max 500 renewals per run — remaining process next hour.
     """
+    logger.info("[dispatch_renewals] Task started")
     now = timezone.now()
     window_start = now + timedelta(hours=24)
     window_end = now + timedelta(hours=48)
+    logger.info(f"[dispatch_renewals] Query window: {window_start} to {window_end}")
 
     renewing = Subscription.objects.filter(
         status=Subscription.Status.ACTIVE,
@@ -96,20 +98,27 @@ def dispatch_renewal_attempts(batch_size=500):
         Q(renewal_attempts=2, last_renewal_attempt_at__gte=now - timedelta(hours=24))
     )[:batch_size]
 
-    count = 0
-    for sub_id in renewing:
-        attempt_auto_renewal.delay(str(sub_id))
-        count += 1
+    # Force evaluation to get count and log details
+    renewing_list = list(renewing)
+    count = len(renewing_list)
+    logger.info(f"[dispatch_renewals] Found {count} subscriptions to renew")
+
+    for sub in renewing_list:
+        logger.info(f"[dispatch_renewals] Dispatching renewal for sub {sub.id}, user {sub.user_id}, ends {sub.end_date_utc}")
+        attempt_auto_renewal.delay(str(sub.id))
 
     if count > 0:
-        logger.info(f"Dispatched {count} renewals for attempt")
+        logger.info(f"[dispatch_renewals] Dispatched {count} renewals")
+    else:
+        logger.info("[dispatch_renewals] No subscriptions found for renewal")
     if count == batch_size:
-        logger.info("Renewal batch limit reached, remaining will process next hour")
+        logger.info("[dispatch_renewals] Batch limit reached")
 
 
 @shared_task(
     bind=True,
     max_retries=MAX_RETRIES,
+    name=settings.TASK_SUBSCRIPTION_ATTEMPT_RENEWAL,
     queue='renewals',
     rate_limit='5/s',
 )
@@ -123,8 +132,13 @@ def attempt_auto_renewal(self, subscription_id):
     """
     from .services import RenewalProcessor
 
+    logger.info(f"[attempt_auto_renewal] Task started for subscription {subscription_id}, retry {self.request.retries}")
+
     try:
-        RenewalProcessor(subscription_id).execute()
+        processor = RenewalProcessor(subscription_id)
+        logger.info(f"[attempt_auto_renewal] Processor initialized for {subscription_id}")
+        result = processor.execute()
+        logger.info(f"[attempt_auto_renewal] Processor.execute() completed for {subscription_id}, result: {result}")
     except Exception as exc:
-        logger.error(f"Renewal error for {subscription_id}: {exc}")
+        logger.error(f"[attempt_auto_renewal] Renewal error for {subscription_id}: {exc}", exc_info=True)
         raise self.retry(exc=exc, countdown=backoff_with_jitter(self.request.retries))

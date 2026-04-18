@@ -230,6 +230,24 @@ class RenewalProcessor:
 
         return stored_method
 
+    def _has_successful_renewal_payment(self):
+        """
+        Checks if a successful renewal payment exists for this subscription.
+        Prevents double-charging when webhook succeeded but renewal failed.
+        Uses subscription_id (unique per subscription) - once renewed, new subscription has new ID.
+        """
+        logger.info(f"[_has_successful_renewal_payment] Checking for successful renewal payment | subscription={self.subscription.id}")
+        exists = Payment.objects.filter(
+            purpose=PaymentPurpose.RENEW_SUBSCRIPTION,
+            status=PaymentStatus.SUCCESS,
+            metadata__subscription_id=str(self.subscription.id),
+        ).exists()
+        logger.info(
+            f"[_has_successful_renewal_payment] subscription={self.subscription.id} | "
+            f"exists={exists}"
+        )
+        return exists
+
     def _phase_2_create_payment(self):
         """
         Creates PENDING Payment record before provider call.
@@ -243,6 +261,15 @@ class RenewalProcessor:
             return
 
         if self.idem_key.recovery_point == IdempotencyRecoveryPoint.STARTED:
+            # Check if webhook already processed a successful charge for this renewal
+            if self._has_successful_renewal_payment():
+                logger.info(
+                    f"Existing successful payment found, completing renewal | "
+                    f"subscription={self.subscription_id}"
+                )
+                self._complete_with_existing_payment()
+                return
+
             from payments.utils import generate_payment_reference
 
             with transaction.atomic():
@@ -318,6 +345,8 @@ class RenewalProcessor:
                 purpose=PaymentPurpose.RENEW_SUBSCRIPTION,
                 metadata={
                     'attempt_number': self.next_attempt,
+                    'subscription_id': str(self.subscription.id),
+                    'stored_method_id': str(self.stored_method.id),
                 },
             )
 
@@ -355,10 +384,8 @@ class RenewalProcessor:
                 f"payment={self.payment.id} | awaiting webhook confirmation"
             )
         else:
-            # Decline path - mark payment failed, finalize, notify
-            self.payment.status = PaymentStatus.FAILED
-            self.payment.save(update_fields=['status'])
-
+            # Decline path - don't mark payment failed here, let webhook be source of truth
+            # Payment stays PENDING until webhook confirms success/failure
             self._finalize(
                 response_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 response_body={
@@ -407,3 +434,71 @@ class RenewalProcessor:
             self.subscription.save(update_fields=[
                 'renewal_attempts', 'last_renewal_attempt_at'
             ])
+
+    def _complete_with_existing_payment(self):
+        """
+        Completes renewal using an existing successful payment.
+        Called when we detect a successful payment was already processed
+        but subscription wasn't renewed (webhook failed).
+
+        Finds the payment and calls SubscriptionService.renew() to complete
+        the renewal that the webhook failed to do.
+        """
+        from subscriptions.services import SubscriptionService
+        from notifications.services import NotificationService
+
+        payment = Payment.objects.filter(
+            purpose=PaymentPurpose.RENEW_SUBSCRIPTION,
+            status=PaymentStatus.SUCCESS,
+            metadata__subscription_id=str(self.subscription.id),
+        ).first()
+
+        if not payment:
+            logger.error(
+                f"[ADMIN-ALERT] Successful payment disappeared between check and completion | "
+                f"subscription={self.subscription_id}"
+            )
+            raise PaymentDeclined("Successful payment disappeared")
+
+        try:
+            new_subscription = SubscriptionService.renew(
+                old_subscription=self.subscription,
+                payment=payment,
+            )
+
+            with transaction.atomic():
+                self.idem_key.recovery_point = IdempotencyRecoveryPoint.FINISHED
+                self.idem_key.response_code = 200
+                self.idem_key.response_body = {
+                    'completed': 'Renewal completed from existing payment',
+                    'payment_id': str(payment.id),
+                    'new_subscription_id': str(new_subscription.id),
+                }
+                self.idem_key.save(update_fields=[
+                    'recovery_point', 'response_code', 'response_body'
+                ])
+
+            logger.info(
+                f"Renewal completed from existing payment | "
+                f"subscription={self.subscription_id} | "
+                f"payment={payment.id} | new_sub={new_subscription.id}"
+            )
+
+            transaction.on_commit(
+                lambda: NotificationService.send_subscription_renewed(
+                    user=self.subscription.user,
+                    subscription=new_subscription,
+                    payment=payment,
+                )
+            )
+
+        except Exception as exc:
+            logger.error(
+                f"[ADMIN-ALERT] Failed to complete renewal from existing payment | "
+                f"subscription={self.subscription_id} | payment={payment.id} | error={exc}"
+            )
+            self._finalize(
+                response_code=500,
+                response_body={'error': f'Failed to complete renewal: {str(exc)}'}
+            )
+            raise

@@ -419,7 +419,7 @@ class SubscriptionService:
         with transaction.atomic():
             # Mark old as RENEWED
             old_subscription.status = Subscription.Status.RENEWED
-            old_subscription.save(update_fields=['status', 'updated_at'])
+            old_subscription.save(update_fields=['status'])
 
             # Calculate new period
             now = timezone.now()
