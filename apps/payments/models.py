@@ -106,6 +106,9 @@ class Payment(models.Model):
     
     metadata = models.JSONField(default=dict, blank=True)
     
+    # Failure reason when payment is declined/failed
+    failure_reason = models.TextField(blank=True, default='')
+    
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

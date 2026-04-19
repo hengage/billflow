@@ -149,9 +149,16 @@ class WebhookHandler:
             )
 
         elif event_type == StripeEvent.PAYMENT_INTENT_FAILED:
+            # Extract error details from last_payment_error
+            last_error = intent.get('last_payment_error', {})
+            error_code = last_error.get('code', 'unknown')
+            error_message = last_error.get('message', 'Payment failed')
+            failure_reason = f"[{error_code}] {error_message}"
+            
             cls._handle_failure(
                 reference=reference,
                 webhook_log=webhook_log,
+                failure_reason=failure_reason,
             )
 
         else:
@@ -251,7 +258,7 @@ class WebhookHandler:
         )
 
     @classmethod
-    def _handle_failure(cls, reference, webhook_log):
+    def _handle_failure(cls, reference, webhook_log, failure_reason=None):
         """
         Processes a failed payment event.
         Marks the Payment as FAILED and queues a failure notification.
@@ -273,7 +280,11 @@ class WebhookHandler:
                 return
 
             payment.status = PaymentStatus.FAILED
-            payment.save(update_fields=['status'])
+            if failure_reason:
+                payment.failure_reason = failure_reason
+                payment.save(update_fields=['status', 'failure_reason'])
+            else:
+                payment.save(update_fields=['status'])
 
             webhook_log.processed = True
             webhook_log.save(update_fields=['processed'])
