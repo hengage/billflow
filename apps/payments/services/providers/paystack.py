@@ -209,28 +209,22 @@ class PaystackProvider:
                 timeout=30,
             )
         except requests.exceptions.RequestException as exc:
-            logger.error(
-                f'Paystack charge_authorization connection error | ref={reference} | error={str(exc)}'
-            )
             raise ThirdPartyServiceError()
 
+        # Check for validation errors (400/422) - no transaction created, no webhook
         if response.status_code in PAYSTACK_NON_RETRYABLE_STATUS_CODES:
-            error_message = response.json().get('message', 'Card declined.')
+            error_data = response.json()
+            error_message = error_data.get('message', 'Card declined.')
+            error_type = error_data.get('type', '')
             logger.warning(
                 f'Paystack charge_authorization declined | ref={reference} | '
-                f'status={response.status_code} | message={error_message}'
+                f'status={response.status_code} | type={error_type} | message={error_message}'
             )
-            raise PaymentDeclined(error_message)
-
-        if response.status_code >= 500:
-            logger.error(
-                f'Paystack charge_authorization server error | ref={reference} | '
-                f'status={response.status_code}'
-            )
-            raise ThirdPartyServiceError()
+            raise PaymentDeclined(error_message, provider_status_code=response.status_code)
 
         data = response.json()
         if not data.get('status'):
+            # HTTP 200 but charge failed - transaction exists, webhook will come
             raise PaymentDeclined(data.get('message', 'Charge failed.'))
 
         return {

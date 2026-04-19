@@ -117,25 +117,28 @@ class StripeProvider:
             }
 
         except stripe.error.CardError as exc:
-            # Card was declined — permanent rejection for this stored method
+            # Card was declined — transaction exists, webhook will confirm
             logger.warning(
                 f'Stripe stored charge declined | ref={reference} | '
                 f'code={exc.code} | message={str(exc)}'
             )
-            raise PaymentDeclined(str(exc))
+            # 402 = Payment Required (transaction created, webhook coming)
+            raise PaymentDeclined(str(exc), provider_status_code=402)
 
         except stripe.error.InvalidRequestError as exc:
-            # Invalid payment_method or customer — permanent
+            # Invalid payment_method or customer — validation error, no transaction
             logger.warning(
                 f'Stripe stored charge invalid request | ref={reference} | message={str(exc)}'
             )
-            raise PaymentDeclined(str(exc))
+            # 400 = validation error (no transaction, no webhook)
+            raise PaymentDeclined(str(exc), provider_status_code=400)
 
         except stripe.error.AuthenticationError as exc:
             logger.error(
                 f'Stripe auth error | ref={reference} | message={str(exc)}'
             )
-            raise PaymentDeclined('Payment configuration error.')
+            # 401 = auth error (no transaction, no webhook)
+            raise PaymentDeclined('Payment configuration error.', provider_status_code=401)
 
         except (stripe.error.APIConnectionError, stripe.error.APIError) as exc:
             # Transient errors — retryable

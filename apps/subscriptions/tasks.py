@@ -75,7 +75,7 @@ def process_single_expiry(self, subscription_id):
 @shared_task(name=settings.TASK_SUBSCRIPTION_DISPATCH_RENEWALS)
 def dispatch_renewal_attempts(batch_size=500):
     """
-    Runs every 2 minutes (testing). Finds subscriptions expiring in 24-48h with:
+    Runs every 2 minutes (testing). Finds subscriptions expiring in 48-72h with:
     - Status ACTIVE (RENEWED ones already handled)
     - Under 3 renewal attempts
     - Respects cooldown: 6h after 1st attempt, 24h after 2nd
@@ -84,8 +84,8 @@ def dispatch_renewal_attempts(batch_size=500):
     """
     logger.info("[dispatch_renewals] Task started")
     now = timezone.now()
-    window_start = now + timedelta(hours=24)
-    window_end = now + timedelta(hours=48)
+    window_start = now + timedelta(hours=48)
+    window_end = now + timedelta(hours=72)
     logger.info(f"[dispatch_renewals] Query window: {window_start} to {window_end}")
 
     renewing = Subscription.objects.filter(

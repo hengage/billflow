@@ -360,6 +360,7 @@ class RenewalProcessor:
                 'success': False,
                 'declined': True,
                 'error': str(exc),
+                'provider_status_code': getattr(exc, 'provider_status_code', None),
             }
 
     def _phase_4_finalize(self, provider_result):
@@ -384,13 +385,27 @@ class RenewalProcessor:
                 f"payment={self.payment.id} | awaiting webhook confirmation"
             )
         else:
-            # Decline path - don't mark payment failed here, let webhook be source of truth
-            # Payment stays PENDING until webhook confirms success/failure
+            # Decline path
+            provider_status_code = provider_result.get('provider_status_code')
+            
+            # Validation errors (400) = no transaction created, no webhook coming
+            # Mark payment FAILED immediately
+            if provider_status_code == 400:
+                self.payment.status = PaymentStatus.FAILED
+                self.payment.save(update_fields=['status'])
+                logger.info(
+                    f"Payment marked FAILED due to validation error | "
+                    f"payment={self.payment.id} | error={provider_result['error']}"
+                )
+            # else: Processing failure (422 or 200 status=false)
+            # Transaction exists, webhook will confirm - keep PENDING
+            
             self._finalize(
                 response_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 response_body={
                     'error': provider_result['error'],
                     'provider': self.payment.provider,
+                    'provider_status_code': provider_status_code,
                 },
             )
 
@@ -461,12 +476,12 @@ class RenewalProcessor:
             raise PaymentDeclined("Successful payment disappeared")
 
         try:
-            new_subscription = SubscriptionService.renew(
-                old_subscription=self.subscription,
-                payment=payment,
-            )
-
             with transaction.atomic():
+                new_subscription = SubscriptionService.renew(
+                    old_subscription=self.subscription,
+                    payment=payment,
+                )
+
                 self.idem_key.recovery_point = IdempotencyRecoveryPoint.FINISHED
                 self.idem_key.response_code = 200
                 self.idem_key.response_body = {
