@@ -176,6 +176,9 @@ class PaymentProcessor:
         """
         from payments.utils import generate_payment_reference
 
+        # Extract metadata (plan_id, billing_cycle, etc.) for storage and webhook processing
+        metadata = self._extract_metadata(self.request_params)
+
         with transaction.atomic():
             Payment.objects.create(
                 user=self.user,
@@ -185,6 +188,7 @@ class PaymentProcessor:
                 provider=self.request_params['provider'],
                 reference=generate_payment_reference(),
                 idempotency_key=idem_key,
+                metadata=metadata,
             )
 
             idem_key.recovery_point = IdempotencyRecoveryPoint.PAYMENT_CREATED

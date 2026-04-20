@@ -376,17 +376,15 @@ class WebhookHandler:
     def _activate_subscription(payment, metadata):
         """
         Activates a subscription after a successful payment.
-        plan_id and billing_cycle were stored in the payment metadata at initiation time.
         """
-        plan_id = metadata.get('plan_id')
-        billing_cycle = metadata.get('billing_cycle')
-        if not plan_id:
-            logger.error(
-                f'plan_id missing from payment metadata | payment={payment.id}'
-            )
-            return
-
         from subscriptions.services import SubscriptionService
+
+        plan_id, billing_cycle = SubscriptionService.get_renewal_params(
+            user=payment.user,
+            plan_id=metadata.get('plan_id'),
+            billing_cycle=metadata.get('billing_cycle'),
+        )
+
         SubscriptionService.activate(
             user=payment.user,
             plan_id=plan_id,

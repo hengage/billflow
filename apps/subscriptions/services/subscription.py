@@ -46,6 +46,53 @@ class SubscriptionService:
         return subscription
 
     @staticmethod
+    def get_renewal_params(user, plan_id=None, billing_cycle=None):
+        """
+        Returns plan_id and billing_cycle for renewal/activation.
+        plan_id and billing_cycle were stored in the payment metadata at initiation time.
+        Falls back to user's existing active subscription if metadata is missing.
+        Uses provided values or falls back to user's active subscription.
+
+        Args:
+            user: User instance
+            plan_id: Optional plan_id from metadata
+            billing_cycle: Optional billing_cycle from metadata
+
+        Returns:
+            tuple: (plan_id, billing_cycle) - both guaranteed non-None if successful
+
+        Raises:
+            ValueError: If plan_id cannot be determined and no active subscription exists
+        """
+        if not plan_id or not billing_cycle:
+            existing = Subscription.objects.filter(
+                user=user,
+                status=Subscription.Status.ACTIVE,
+            ).select_related('plan').first()
+
+            if existing:
+                if not plan_id:
+                    plan_id = str(existing.plan.id)
+                    logger.warning(
+                        f'plan_id missing from metadata, using existing sub plan | '
+                        f'user={user.id} | plan_id={plan_id}'
+                    )
+                if not billing_cycle:
+                    billing_cycle = existing.billing_cycle
+                    logger.warning(
+                        f'billing_cycle missing from metadata, using existing sub | '
+                        f'user={user.id} | billing_cycle={billing_cycle}'
+                    )
+
+        if not plan_id:
+            raise ValueError(
+                f'Cannot determine plan_id: missing from metadata and no active subscription | '
+                f'user={user.id}'
+            )
+
+        return plan_id, billing_cycle
+
+    @staticmethod
     def activate(user, plan_id, billing_cycle, payment=None):
         """
         Activates a subscription for the user.
@@ -76,11 +123,11 @@ class SubscriptionService:
             if existing:
                 if existing.plan_id == plan.id:
                     # Same plan = manual renewal with 7-day gate
-                    subscription = SubscriptionService.process_manual_renewal(
-                        existing_subscription=existing,
-                        plan=plan,
-                        billing_cycle=billing_cycle,
+                    subscription = SubscriptionService.renew(
+                        old_subscription=existing,
                         payment=payment,
+                        billing_cycle=billing_cycle,
+                        plan=plan,
                     )
                 else:
                     # Different plan - not handled here, use switch plans option
@@ -353,38 +400,6 @@ class SubscriptionService:
         return (True, None)
 
     @staticmethod
-    def process_manual_renewal(existing_subscription, plan, billing_cycle, payment=None):
-        """
-        Handles user-initiated early renewal with 7-day eligibility gate.
-        Only allows renewal when subscription has 7 or fewer days remaining.
-
-        Args:
-            existing_subscription: Current active Subscription instance
-            plan: Plan instance (same as current)
-            billing_cycle: Billing cycle (monthly or yearly)
-            payment: Payment instance (None for wallet payments)
-
-        Returns:
-            Updated Subscription instance with extended end_date_utc
-
-        """
-        # Extend the subscription
-        if billing_cycle == Subscription.BillingCycle.MONTHLY:
-            existing_subscription.end_date_utc += timedelta(days=30)
-            existing_subscription.amount_paid = plan.monthly_price_ngn
-        else:
-            existing_subscription.end_date_utc += timedelta(days=365)
-            existing_subscription.amount_paid = plan.yearly_price_ngn
-
-        existing_subscription.billing_cycle = billing_cycle
-        existing_subscription.payment = payment
-        existing_subscription.save(update_fields=[
-            'end_date_utc', 'billing_cycle', 'amount_paid', 'payment'
-        ])
-
-        return existing_subscription
-
-    @staticmethod
     def expire_subscription(subscription):
         """
         Marks a subscription as expired.
@@ -402,7 +417,7 @@ class SubscriptionService:
         )
 
     @staticmethod
-    def renew(old_subscription, payment):
+    def renew(old_subscription, payment, billing_cycle=None, plan=None):
         """
         Renews a subscription by marking old as RENEWED and creating new ACTIVE.
 
@@ -412,10 +427,16 @@ class SubscriptionService:
         Args:
             old_subscription: Subscription instance to renew (must be ACTIVE)
             payment: Payment instance from successful charge
+            billing_cycle: Optional override for billing cycle (defaults to old_subscription's)
+            plan: Optional override for plan (defaults to old_subscription's)
 
         Returns:
             New Subscription instance
         """
+        # Use provided values or fall back to old subscription's
+        billing_cycle = billing_cycle or old_subscription.billing_cycle
+        plan = plan or old_subscription.plan
+
         with transaction.atomic():
             # Mark old as RENEWED
             old_subscription.status = Subscription.Status.RENEWED
@@ -425,18 +446,18 @@ class SubscriptionService:
             now = timezone.now()
             new_start = max(now, old_subscription.end_date_utc)
 
-            if old_subscription.billing_cycle == Subscription.BillingCycle.MONTHLY:
+            if billing_cycle == Subscription.BillingCycle.MONTHLY:
                 new_end = new_start + timedelta(days=30)
-                amount = old_subscription.plan.monthly_price_ngn
+                amount = plan.monthly_price_ngn
             else:
                 new_end = new_start + timedelta(days=365)
-                amount = old_subscription.plan.yearly_price_ngn
+                amount = plan.yearly_price_ngn
 
             # Create new subscription
             new_subscription = Subscription.objects.create(
                 user=old_subscription.user,
-                plan=old_subscription.plan,
-                billing_cycle=old_subscription.billing_cycle,
+                plan=plan,
+                billing_cycle=billing_cycle,
                 amount_paid=amount,
                 status=Subscription.Status.ACTIVE,
                 start_date_utc=new_start,
