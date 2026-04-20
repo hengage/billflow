@@ -19,6 +19,7 @@ class PaymentPurpose(models.TextChoices):
 class PaymentProvider(models.TextChoices):
     PAYSTACK = 'paystack', _('Paystack')
     STRIPE = 'stripe', _('Stripe')
+    WALLET = 'wallet', _('Wallet')
 
 
 class IdempotencyRecoveryPoint(models.TextChoices):

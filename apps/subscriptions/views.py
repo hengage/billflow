@@ -5,7 +5,7 @@ from rest_framework import status
 from django.core.cache import cache
 
 from api_response.helpers import success, fail, created
-from payments.constants import Currency, PaymentPurpose
+from payments.constants import Currency, PaymentPurpose, PaymentProvider
 from .models import Plan, Subscription
 from .serializers import (
     PlanSerializer,
@@ -14,6 +14,7 @@ from .serializers import (
     SwitchPlanSerializer,
 )
 from .services import SubscriptionService
+from notifications.services import NotificationService
 from .api_schema import (
     plan_list_schema,
     subscribe_schema,
@@ -84,6 +85,9 @@ class SubscribeView(APIView):
     """
     POST /api/subscriptions/
 
+    Creates a NEW subscription. Rejects if user already has an active subscription.
+    Use /api/subscriptions/renew/ to extend an existing subscription.
+
     Two payment flows:
         wallet  → deduct from wallet, activate immediately
         direct  → initiate Paystack/Stripe payment, activate on webhook
@@ -107,24 +111,20 @@ class SubscribeView(APIView):
                 status_code=status.HTTP_404_NOT_FOUND,
             )
 
+        # Block if user already has an active subscription - use /renew endpoint instead
+        if SubscriptionService.get_active_subscription(request.user):
+            return fail(
+                message='You already have an active subscription. Go to Subscription > Renew to extend it.',
+                error={'detail': 'Active subscription exists. Use the renewal option.'},
+                status_code=status.HTTP_409_CONFLICT,
+            )
+
         if payment_method == PaymentMethod.WALLET:
             return self._handle_wallet_payment(request.user, plan, billing_cycle)
 
         return self._handle_direct_payment(request, plan, serializer.validated_data)
 
     def _handle_wallet_payment(self, user, plan, billing_cycle):
-        # Pre-validate renewal eligibility before deducting from wallet
-        can_renew, error_message = SubscriptionService.can_renew(
-            user=user,
-            plan_id=str(plan.id)
-        )
-        if not can_renew:
-            return fail(
-                message=error_message,
-                error={'detail': error_message},
-                status_code=status.HTTP_400_BAD_REQUEST,
-            )
-
         try:
             subscription = SubscriptionService.subscribe_via_wallet(user, plan, billing_cycle)
 
@@ -151,17 +151,6 @@ class SubscribeView(APIView):
         The subscription is NOT activated here — it's activated by the
         webhook handler when the payment succeeds.
         """
-        # Pre-validate renewal eligibility before initiating payment
-        can_renew, error_message = SubscriptionService.can_renew(
-            user=request.user,
-            plan_id=str(plan.id)
-        )
-        if not can_renew:
-            return fail(
-                message=error_message,
-                status_code=status.HTTP_400_BAD_REQUEST,
-            )
-
         idempotency_key = request.headers.get('X-Idempotency-Key')
         if not idempotency_key:
             return fail(
@@ -194,6 +183,133 @@ class SubscribeView(APIView):
             return success(
                 data=response_body,
                 message='Payment initiated. Subscription will activate on payment confirmation.',
+            )
+        except ConflictError as exc:
+            return fail(message=str(exc), status_code=status.HTTP_409_CONFLICT)
+
+
+@subscribe_schema
+class RenewView(APIView):
+    """
+    POST /api/subscriptions/renew/
+
+    Extends an existing subscription. Requires active subscription within
+    7 days of expiry (renewal eligibility gate).
+
+    Two payment flows:
+        wallet  → deduct from wallet, renew immediately
+        direct  → initiate Paystack/Stripe payment, renew on webhook
+    """
+    permission_classes = (IsAuthenticated,)
+
+    def post(self, request):
+        serializer = SubscribeSerializer(data=request.data)
+        if not serializer.is_valid():
+            return fail(message='Validation failed.', error=serializer.errors)
+
+        billing_cycle = serializer.validated_data['billing_cycle']
+        payment_method = serializer.validated_data['payment_method']
+
+        # Require active subscription to renew
+        existing_sub = SubscriptionService.get_active_subscription(request.user)
+        if not existing_sub:
+            return fail(
+                message='No active subscription to renew.',
+                status_code=status.HTTP_404_NOT_FOUND,
+            )
+
+        # Use existing plan for renewal (ignore plan_id from request)
+        plan = existing_sub.plan
+
+        if payment_method == PaymentMethod.WALLET:
+            return self._handle_wallet_renewal(request.user, existing_sub, plan, billing_cycle)
+
+        return self._handle_direct_renewal(request, existing_sub, plan, serializer.validated_data)
+
+    def _handle_wallet_renewal(self, user, existing_sub, plan, billing_cycle):
+        # Validate 7-day renewal eligibility gate
+        can_renew, error_message = SubscriptionService.can_renew(
+            user=user,
+            plan_id=str(plan.id)
+        )
+        if not can_renew:
+            return fail(
+                message=error_message,
+                error={'detail': error_message},
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            from django.db import transaction
+
+            new_subscription, payment = SubscriptionService.renew_via_wallet(
+                user=user,
+                existing_sub=existing_sub,
+                billing_cycle=billing_cycle,
+            )
+
+            transaction.on_commit(
+                lambda: NotificationService.send_subscription_renewed(user, new_subscription, payment)
+            )
+
+            return created(
+                data=SubscriptionSerializer(new_subscription).data,
+                message='Subscription renewed successfully.',
+            )
+        except ValueError as exc:
+            return fail(
+                message=str(exc),
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
+
+    def _handle_direct_renewal(self, request, existing_sub, plan, validated_data):
+        """
+        Initiates payment for subscription renewal.
+        The renewal is NOT completed here — it's completed by the
+        webhook handler when the payment succeeds.
+        """
+        # Validate 7-day renewal eligibility gate
+        can_renew, error_message = SubscriptionService.can_renew(
+            user=request.user,
+            plan_id=str(plan.id)
+        )
+        if not can_renew:
+            return fail(
+                message=error_message,
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
+
+        idempotency_key = request.headers.get('X-Idempotency-Key')
+        if not idempotency_key:
+            return fail(
+                message='X-Idempotency-Key header is required for direct payments.',
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
+
+        from payments.services.processor import PaymentProcessor, ConflictError
+
+        billing_cycle = validated_data['billing_cycle']
+        amount = plan.monthly_price_ngn if billing_cycle == Subscription.BillingCycle.MONTHLY else plan.yearly_price_ngn
+        request_params = {
+            'amount': str(amount),
+            'provider': validated_data['provider'],
+            'purpose': PaymentPurpose.RENEW_SUBSCRIPTION.value,
+            'plan_id': str(plan.id),
+            'billing_cycle': billing_cycle,
+        }
+
+        processor = PaymentProcessor(
+            user=request.user,
+            idempotency_key_value=idempotency_key,
+            request_path=request.path,
+            request_params=request_params,
+        )
+
+        try:
+            response_body, response_code = processor.execute()
+            return success(
+                data=response_body,
+                message='Payment initiated. Subscription will renew on payment confirmation.',
             )
         except ConflictError as exc:
             return fail(message=str(exc), status_code=status.HTTP_409_CONFLICT)

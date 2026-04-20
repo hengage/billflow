@@ -178,9 +178,9 @@ class SubscriptionService:
             Subscription instance
         """
         from wallets.service import WalletService
-        import uuid
+        from payments.utils import generate_payment_reference
 
-        reference = str(uuid.uuid4())
+        reference = generate_payment_reference()
 
         if billing_cycle == Subscription.BillingCycle.MONTHLY:
             amount = plan.monthly_price_ngn
@@ -189,23 +189,99 @@ class SubscriptionService:
 
         with transaction.atomic():
             # WalletService.deduct() handles the atomic balance check and deduction.
-            WalletService.deduct(
+            wallet_tx = WalletService.deduct(
                 user=user,
                 amount=amount,
                 reference=reference,
             )
 
-            # Deduction succeeded - activate the subscription.
-            # No payment record for wallet subscriptions - the WalletTransaction
-            # is the financial record for this flow.
+            # Create Payment record for unified transaction history
+            from payments.models import Payment
+            from payments.constants import PaymentProvider, PaymentPurpose, PaymentStatus
+            payment = Payment.objects.create(
+                user=user,
+                amount=amount,
+                currency='NGN',
+                provider=PaymentProvider.WALLET,
+                purpose=PaymentPurpose.SUBSCRIPTION,
+                status=PaymentStatus.SUCCESS,
+                reference=reference,
+                metadata={
+                    'wallet_transaction_id': str(wallet_tx.id),
+                },
+            )
+
+            # Activate the subscription with payment record
             subscription = SubscriptionService.activate(
                 user=user,
                 plan_id=str(plan.id),
                 billing_cycle=billing_cycle,
-                payment=None,
+                payment=payment,
             )
 
         return subscription
+
+    @staticmethod
+    def renew_via_wallet(user, existing_sub, billing_cycle):
+        """
+        Renews a subscription using wallet balance.
+        Deducts from wallet, marks old subscription RENEWED, creates new ACTIVE one.
+
+        Args:
+            user: User instance
+            existing_sub: Subscription instance to renew
+            billing_cycle: MONTHLY or YEARLY
+
+        Returns:
+            tuple: (new_subscription, payment) for notification handling
+
+        Raises:
+            ValueError if insufficient balance
+        """
+        from wallets.service import WalletService
+        from payments.models import Payment
+        from payments.constants import PaymentProvider, PaymentPurpose, PaymentStatus
+        from payments.utils import generate_payment_reference
+
+        plan = existing_sub.plan
+        reference = generate_payment_reference()
+
+        if billing_cycle == Subscription.BillingCycle.MONTHLY:
+            amount = plan.monthly_price_ngn
+        else:
+            amount = plan.yearly_price_ngn
+
+        with transaction.atomic():
+            # Deduct from wallet
+            wallet_tx = WalletService.deduct(
+                user=user,
+                amount=amount,
+                reference=reference,
+            )
+
+            # Create Payment record for unified transaction history
+            payment = Payment.objects.create(
+                user=user,
+                amount=amount,
+                currency='NGN',
+                provider=PaymentProvider.WALLET,
+                purpose=PaymentPurpose.RENEW_SUBSCRIPTION,
+                status=PaymentStatus.SUCCESS,
+                reference=reference,
+                metadata={
+                    'wallet_transaction_id': str(wallet_tx.id),
+                },
+            )
+
+            # Renew subscription (marks old RENEWED, creates new ACTIVE)
+            new_subscription = SubscriptionService.renew(
+                old_subscription=existing_sub,
+                payment=payment,
+                billing_cycle=billing_cycle,
+                plan=plan,
+            )
+
+        return new_subscription, payment
 
     @staticmethod
     def switch_plan_via_wallet(user, new_plan, billing_cycle):
