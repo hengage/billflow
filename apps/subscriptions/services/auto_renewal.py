@@ -1,5 +1,5 @@
 """
-RenewalProcessor - Orchestrates subscription auto-renewal with idempotency.
+AutoRenewalProcessor - Orchestrates subscription auto-renewal with idempotency.
 
 Mirrors PaymentProcessor pattern for consistency:
 - Four-phase execution with crash recovery
@@ -8,7 +8,7 @@ Mirrors PaymentProcessor pattern for consistency:
 - State finalization
 
 Usage:
-    RenewalProcessor(subscription_id).execute()
+    AutoRenewalProcessor(subscription_id).execute()
 """
 import logging
 from datetime import timedelta
@@ -33,7 +33,7 @@ STALE_LOCK_SECONDS = 60  # 1 minute threshold for stale locks
 MAX_RENEWAL_ATTEMPTS = 3
 
 
-class RenewalProcessor:
+class AutoRenewalProcessor:
     """
     Orchestrates subscription auto-renewal with idempotency and crash recovery.
 
@@ -246,10 +246,10 @@ class RenewalProcessor:
 
         if not stored_method:
             logger.warning(
-                f'No stored payment method for renewal | '
+                f'No stored payment method for auto-renewal | '
                 f'user={self.subscription.user.id} | sub={self.subscription_id}'
             )
-            raise PaymentDeclined('No stored payment method available for renewal.')
+            raise PaymentDeclined('No stored payment method available for auto-renewal.')
 
         return stored_method
 
@@ -395,7 +395,7 @@ class RenewalProcessor:
                 response_body=provider_result['provider_data'],
             )
             logger.info(
-                f"Renewal charge initiated: {self.subscription_id} | "
+                f"Auto-renewal charge initiated: {self.subscription_id} | "
                 f"payment={self.payment.id} | awaiting webhook confirmation"
             )
         else:
@@ -435,7 +435,7 @@ class RenewalProcessor:
                 attempts_remaining=attempts_remaining,
             )
             logger.warning(
-                f"Renewal declined: {self.subscription_id}, "
+                f"Auto-renewal declined: {self.subscription_id}, "
                 f"attempt {self.subscription.renewal_attempts}, "
                 f"{attempts_remaining} remaining"
             )
@@ -515,7 +515,7 @@ class RenewalProcessor:
                 )
 
             logger.info(
-                f"Renewal completed from existing payment | "
+                f"Auto-renewal completed from existing payment | "
                 f"subscription={self.subscription_id} | "
                 f"payment={payment.id} | new_sub={new_subscription.id}"
             )
@@ -527,6 +527,6 @@ class RenewalProcessor:
             )
             self._finalize(
                 response_code=500,
-                response_body={'error': f'Failed to complete renewal: {str(exc)}'}
+                response_body={'error': f'Failed to complete auto-renewal: {str(exc)}'}
             )
             raise

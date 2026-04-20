@@ -83,7 +83,7 @@ class StripeProvider:
     def charge_stored_method(cls, payment_method_id, customer_id, amount, reference, purpose, metadata=None):
         """
         Charges a stored payment method for recurring payments.
-        Used by RenewalProcessor for subscription auto-renewal.
+        Used by AutoRenewalProcessor for subscription auto-renewal.
 
         Creates a PaymentIntent with off_session=True for recurring charges.
         The payment_method_id is the stored card token (pm_xxx).

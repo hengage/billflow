@@ -183,7 +183,7 @@ class PaystackProvider:
     def charge_authorization(cls, authorization_code, email, amount, reference, purpose, metadata=None):
         """
         Charges a stored authorization code for recurring payments.
-        Used by RenewalProcessor for subscription auto-renewal.
+        Used by AutoRenewalProcessor for subscription auto-renewal.
 
         Endpoint: POST /transaction/charge_authorization
         Reference: https://paystack.com/docs/payments/recurring-charges/

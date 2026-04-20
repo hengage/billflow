@@ -72,8 +72,8 @@ def process_single_expiry(self, subscription_id):
         raise self.retry(exc=exc, countdown=backoff_with_jitter(self.request.retries))
 
 
-@shared_task(name=settings.TASK_SUBSCRIPTION_DISPATCH_RENEWALS)
-def dispatch_renewal_attempts(batch_size=500):
+@shared_task(name=settings.TASK_SUBSCRIPTION_DISPATCH_AUTO_RENEWALS)
+def dispatch_auto_renewals(batch_size=500):
     """
     Runs every 2 minutes (testing). Finds subscriptions expiring in 48-72h with:
     - Status ACTIVE (RENEWED ones already handled)
@@ -118,8 +118,8 @@ def dispatch_renewal_attempts(batch_size=500):
 @shared_task(
     bind=True,
     max_retries=MAX_RETRIES,
-    name=settings.TASK_SUBSCRIPTION_ATTEMPT_RENEWAL,
-    queue='renewals',
+    name=settings.TASK_SUBSCRIPTION_ATTEMPT_AUTO_RENEWAL,
+    queue='auto_renewals',
     rate_limit='5/s',
 )
 def attempt_auto_renewal(self, subscription_id):

@@ -1,4 +1,4 @@
 from .subscription import SubscriptionService
-from .renewal import RenewalProcessor
+from .auto_renewal import AutoRenewalProcessor
 
-__all__ = ['SubscriptionService', 'RenewalProcessor']
+__all__ = ['SubscriptionService', 'AutoRenewalProcessor']

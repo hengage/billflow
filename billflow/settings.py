@@ -19,8 +19,8 @@ from decouple import config
 from .logging import LOGGING
 
 TASK_SUBSCRIPTION_DISPATCH_EXPIRIES = "subscriptions.dispatch_expiries"
-TASK_SUBSCRIPTION_DISPATCH_RENEWALS = "subscriptions.dispatch_renewals"
-TASK_SUBSCRIPTION_ATTEMPT_RENEWAL = "subscriptions.attempt_auto_renewal"
+TASK_SUBSCRIPTION_DISPATCH_AUTO_RENEWALS = "subscriptions.dispatch_auto_renewals"
+TASK_SUBSCRIPTION_ATTEMPT_AUTO_RENEWAL = "subscriptions.attempt_auto_renewal"
 
 # Defines the project's root directory and adds the "apps" subdirectory  
 # to Python's module search path 
@@ -208,7 +208,7 @@ CELERY_TASK_ROUTES = {
     'payments.tasks.send_payment_success_notification': {'queue': 'notifications'},
     'payments.tasks.send_payment_failed_notification': {'queue': 'notifications'},
     'notifications.tasks.send_email_task': {'queue': 'notifications'},
-    TASK_SUBSCRIPTION_DISPATCH_RENEWALS: {'queue': 'default'},
+    TASK_SUBSCRIPTION_DISPATCH_AUTO_RENEWALS: {'queue': 'default'},
     TASK_SUBSCRIPTION_DISPATCH_EXPIRIES: {'queue': 'default'},
 }
 
@@ -227,14 +227,13 @@ CELERY_BEAT_SCHEDULE = {
         'task': TASK_SUBSCRIPTION_DISPATCH_EXPIRIES,
         'schedule': 600.0,  # 10 minutes in seconds
     },
-    'dispatch-renewals-every-2-minutes': {
-        'task': TASK_SUBSCRIPTION_DISPATCH_RENEWALS,
+    'dispatch-auto-renewals-every-2-minutes': {
+        'task': TASK_SUBSCRIPTION_DISPATCH_AUTO_RENEWALS,
         'schedule': 120.0,  # every 2 minutes (temporary for testing)
     },
 }
 
 ASGI_APPLICATION = 'billflow.asgi.application'
-
 
 AUTH_USER_MODEL = 'users.User'
 
