@@ -76,7 +76,18 @@ class RenewalProcessor:
             Exception: Transient errors for Celery retry
         """
         # Phase 1: Acquire subscription lock and idempotency key
-        self._phase_1_acquire()
+        should_continue = self._phase_1_acquire()
+        if not should_continue:
+            return
+
+        # Check for recovery: previous attempt's payment succeeded but renewal failed
+        if self._has_successful_renewal_payment():
+            logger.info(
+                f"Existing successful payment found, completing renewal | "
+                f"subscription={self.subscription_id}"
+            )
+            self._complete_with_existing_payment()
+            return
 
         # Phase 2: Create payment record (if not already created)
         self._phase_2_create_payment()
@@ -108,7 +119,7 @@ class RenewalProcessor:
 
             if not self.subscription:
                 # Already processed by another worker or not active
-                return
+                return False
 
             # Calculate next attempt number for key generation
             self.next_attempt = self.subscription.renewal_attempts + 1
@@ -122,7 +133,12 @@ class RenewalProcessor:
                 self.amount = plan.yearly_price_ngn
 
             # Create or acquire idempotency key
-            self._acquire_key()
+            # Returns False if we should skip (already finished or another worker processing)
+            should_proceed = self._acquire_key()
+            if not should_proceed:
+                return False
+            
+            return True
 
     def _acquire_key(self):
         """
@@ -130,6 +146,10 @@ class RenewalProcessor:
 
         Pattern: inner atomic for create (savepoint), outer for the whole operation.
         Handles race conditions via IntegrityError catch and lock inspection.
+
+        Returns:
+            bool: True if we should proceed with processing, False if we should skip
+                  (key already finished or another worker is actively processing)
         """
         try:
             with transaction.atomic():  # savepoint
@@ -144,6 +164,7 @@ class RenewalProcessor:
                     recovery_point=IdempotencyRecoveryPoint.STARTED,
                     locked_at=timezone.now(),
                 )
+            return True
         except IntegrityError:
             # Key already exists - lock it and inspect its state
             self.idem_key = IdempotencyKey.objects.select_for_update().get(
@@ -155,7 +176,7 @@ class RenewalProcessor:
             # Check if already finished
             if self.idem_key.recovery_point == IdempotencyRecoveryPoint.FINISHED:
                 logger.info(f"Renewal attempt already completed: {self.subscription_id}")
-                return
+                return False
 
             # Check for stale lock (another worker died mid-processing)
             stale_threshold = timezone.now() - timedelta(seconds=STALE_LOCK_SECONDS)
@@ -165,11 +186,13 @@ class RenewalProcessor:
                     f"Renewal attempt {self.next_attempt} for subscription "
                     f"{self.subscription_id} is being processed by another worker"
                 )
-                return
+                return False
 
             # Update lock for this attempt
             self.idem_key.locked_at = timezone.now()
             self.idem_key.save(update_fields=['locked_at'])
+            
+            return True
 
     # -------------------------------------------------------------------------
     # PHASE 2: Create payment record
@@ -233,7 +256,7 @@ class RenewalProcessor:
     def _has_successful_renewal_payment(self):
         """
         Checks if a successful renewal payment exists for this subscription.
-        Prevents double-charging when webhook succeeded but renewal failed.
+        Prevents double-charging when webhook succeeded but renewal failed from a previous attempt.
         Uses subscription_id (unique per subscription) - once renewed, new subscription has new ID.
         """
         logger.info(f"[_has_successful_renewal_payment] Checking for successful renewal payment | subscription={self.subscription.id}")
@@ -261,15 +284,6 @@ class RenewalProcessor:
             return
 
         if self.idem_key.recovery_point == IdempotencyRecoveryPoint.STARTED:
-            # Check if webhook already processed a successful charge for this renewal
-            if self._has_successful_renewal_payment():
-                logger.info(
-                    f"Existing successful payment found, completing renewal | "
-                    f"subscription={self.subscription_id}"
-                )
-                self._complete_with_existing_payment()
-                return
-
             from payments.utils import generate_payment_reference
 
             with transaction.atomic():
@@ -392,7 +406,8 @@ class RenewalProcessor:
             # Mark payment FAILED immediately
             if provider_status_code == 400:
                 self.payment.status = PaymentStatus.FAILED
-                self.payment.save(update_fields=['status'])
+                self.payment.failure_reason = provider_result['error']
+                self.payment.save(update_fields=['status', 'failure_reason'])
                 logger.info(
                     f"Payment marked FAILED due to validation error | "
                     f"payment={self.payment.id} | error={provider_result['error']}"
@@ -482,29 +497,27 @@ class RenewalProcessor:
                     payment=payment,
                 )
 
-                self.idem_key.recovery_point = IdempotencyRecoveryPoint.FINISHED
-                self.idem_key.response_code = 200
-                self.idem_key.response_body = {
-                    'completed': 'Renewal completed from existing payment',
-                    'payment_id': str(payment.id),
-                    'new_subscription_id': str(new_subscription.id),
-                }
-                self.idem_key.save(update_fields=[
-                    'recovery_point', 'response_code', 'response_body'
-                ])
+                self._finalize(
+                    response_code=200,
+                    response_body={
+                        'completed': 'Renewal completed from existing payment',
+                        'payment_id': str(payment.id),
+                        'new_subscription_id': str(new_subscription.id),
+                    }
+                )
+
+                transaction.on_commit(
+                    lambda: NotificationService.send_subscription_renewed(
+                        user=self.subscription.user,
+                        subscription=new_subscription,
+                        payment=payment,
+                    )
+                )
 
             logger.info(
                 f"Renewal completed from existing payment | "
                 f"subscription={self.subscription_id} | "
                 f"payment={payment.id} | new_sub={new_subscription.id}"
-            )
-
-            transaction.on_commit(
-                lambda: NotificationService.send_subscription_renewed(
-                    user=self.subscription.user,
-                    subscription=new_subscription,
-                    payment=payment,
-                )
             )
 
         except Exception as exc:
