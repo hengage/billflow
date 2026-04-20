@@ -49,13 +49,26 @@ class SubscriptionAdmin(admin.ModelAdmin):
     list_display = ('user', 'plan_link', 'billing_cycle', 'status', 'start_date_utc', 'end_date_utc', 'cancelled_at')
     list_filter = ('status', 'billing_cycle', 'plan')
     search_fields = ('user__email', 'user__first_name', 'user__last_name', 'plan__name')
-    readonly_fields = ('id', 'user', 'created_at', 'plan_link')
+    readonly_fields = ('id', 'user', 'created_at', 'plan_link', 'payment_link')
     raw_id_fields = ('user',)  # Makes user searchable with popup
 
     def plan_link(self, obj):
         return format_html('<a href="/admin/subscriptions/plan/{}/change/">{}</a>', obj.plan.id, obj.plan.name)
     plan_link.short_description = 'Plan'
     plan_link.admin_order_field = 'plan__name'
+
+    def payment_link(self, obj):
+        if obj.payment:
+            return format_html(
+                '<a href="/admin/payments/payment/{}/change/">{} - {} - {} - {}</a>',
+                obj.payment.id,
+                obj.payment.user.email,
+                obj.payment.amount,
+                obj.payment.get_purpose_display(),
+                obj.payment.get_status_display()
+            )
+        return '-'
+    payment_link.short_description = 'Payment'
 
     fieldsets = (
         ('User & Plan', {
@@ -65,7 +78,7 @@ class SubscriptionAdmin(admin.ModelAdmin):
             'fields': ('status', 'start_date_utc', 'end_date_utc', 'cancelled_at')
         }),
         ('Payment', {
-            'fields': ('amount_paid', 'payment')
+            'fields': ('amount_paid', 'payment_link')
         }),
         ('Auto-renewal', {
             'fields': ('renewal_attempts', 'last_renewal_attempt_at'),
