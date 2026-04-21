@@ -18,6 +18,7 @@ from notifications.services import NotificationService
 from .api_schema import (
     plan_list_schema,
     subscribe_schema,
+    renew_schema,
     my_subscription_schema,
     cancel_subscription_schema,
     switch_plan_schema,
@@ -188,7 +189,7 @@ class SubscribeView(APIView):
             return fail(message=str(exc), status_code=status.HTTP_409_CONFLICT)
 
 
-@subscribe_schema
+@renew_schema
 class RenewView(APIView):
     """
     POST /api/subscriptions/renew/

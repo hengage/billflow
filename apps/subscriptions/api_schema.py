@@ -70,6 +70,40 @@ subscribe_schema = extend_schema(
 )
 
 
+renew_schema = extend_schema(
+    summary='Renew subscription',
+    description=(
+        'Extends an existing subscription. Requires active subscription within '
+        '7 days of expiry (renewal eligibility gate). '
+        'Two payment flows: '
+        '1) wallet - deducts from wallet balance immediately. '
+        '2) direct - initiates Paystack/Stripe payment, renews on webhook confirmation. '
+        'Requires X-Idempotency-Key header for direct payments.'
+    ),
+    request=SubscribeSerializer,
+    parameters=[
+        OpenApiParameter(
+            name='X-Idempotency-Key',
+            type=str,
+            location=OpenApiParameter.HEADER,
+            description='Unique key for idempotent direct payment requests. Required when payment_method=direct.',
+            required=False,
+        ),
+    ],
+    responses={
+        201: OpenApiResponse(
+            response=create_success_envelope(SubscriptionSerializer),
+            description='Subscription renewed (wallet) or payment initiated (direct).',
+        ),
+        400: OpenApiResponse(description='Validation failed or renewal not eligible.'),
+        401: OpenApiResponse(description='Authentication required.'),
+        404: OpenApiResponse(description='No active subscription to renew.'),
+        409: OpenApiResponse(description='Conflict - request already being processed.'),
+    },
+    tags=['Subscriptions'],
+)
+
+
 my_subscription_schema = extend_schema(
     summary='Get my active subscription',
     description='Returns the authenticated user\'s active subscription if any.',
