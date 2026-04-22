@@ -1,14 +1,14 @@
 import re
 from django.contrib.auth import get_user_model
-from .models import Notification, UserNotificationPreferences
-from .constants import (
+from ..models import Notification, UserNotificationPreferences
+from ..constants import (
     NotificationType,
     NotificationChannel,
     NotificationGroup,
     NOTIFICATION_TYPE_GROUP_MAP,
 )
-from .services.email_providers import get_email_provider
-from .services.template_renderer import TemplateRenderer
+from .email_providers import get_email_provider
+from .template_renderer import TemplateRenderer
 
 User = get_user_model()
 
