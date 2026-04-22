@@ -403,11 +403,10 @@ class WebhookHandler:
 
         subscription_id = metadata.get('subscription_id')
         if not subscription_id:
-            logger.error(
+            raise ValueError(
                 f'Renewal payment missing subscription_id in metadata | '
                 f'payment={payment.id}'
             )
-            return
 
         old_subscription = Subscription.objects.filter(
             id=subscription_id,
