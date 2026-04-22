@@ -42,12 +42,49 @@ class WebhookLogAdmin(admin.ModelAdmin):
     list_filter = ('provider', 'processed', 'permanently_failed')
     search_fields = ('reference', 'event_type')
     readonly_fields = ('id', 'provider', 'event_type', 'reference', 'payload', 'received_at', 'failure_reason')
+    actions = ['reprocess_webhooks']
 
     def has_add_permission(self, request):
         return False
 
     def has_delete_permission(self, request, obj=None):
         return False
+
+    @admin.action(description='Reprocess selected webhooks')
+    def reprocess_webhooks(self, request, queryset):
+        """Manually trigger webhook processing for selected logs."""
+        from payments.services.webhook_handler import WebhookHandler
+
+        processed_count = 0
+        skipped_count = 0
+
+        for log in queryset:
+            if log.processed or log.permanently_failed:
+                skipped_count += 1
+                continue
+
+            try:
+                WebhookHandler.process(str(log.id), log.provider)
+                processed_count += 1
+            except Exception as exc:
+                self.message_user(
+                    request,
+                    f'Failed to reprocess webhook {log.id}: {str(exc)}',
+                    level='error'
+                )
+
+        if processed_count:
+            self.message_user(
+                request,
+                f'Successfully reprocessed {processed_count} webhook(s).',
+                level='success'
+            )
+        if skipped_count:
+            self.message_user(
+                request,
+                f'Skipped {skipped_count} webhook(s) (already processed or permanently failed).',
+                level='warning'
+            )
 
 
 @admin.register(StoredPaymentMethod)
