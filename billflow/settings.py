@@ -275,8 +275,6 @@ SOCIALACCOUNT_PROVIDERS = {
 
 PASSWORD_RESET_CONFIRM_URL = config('PASSWORD_RESET_CONFIRM_URL')
 
-EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
-
 # billflow/settings.py
 SPECTACULAR_SETTINGS = {
     'TITLE': 'BillFlow API',
@@ -311,3 +309,10 @@ SPECTACULAR_SETTINGS = {
 PAYSTACK_SECRET_KEY = config('PAYSTACK_SECRET_KEY')
 STRIPE_SECRET_KEY = config('STRIPE_SECRET_KEY')
 STRIPE_WEBHOOK_SECRET = config('STRIPE_WEBHOOK_SECRET', default='')
+
+# Email Provider Configuration
+EMAIL_PROVIDER = config('EMAIL_PROVIDER', default='console')
+DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='BillFlow <noreply@billflow.app>')
+
+# Brevo (Sendinblue) API Key - required when EMAIL_PROVIDER='brevo'
+BREVO_API_KEY = config('BREVO_API_KEY', default='')
