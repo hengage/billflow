@@ -1,0 +1,46 @@
+{% extends "emails/_base.html" %}
+
+{% block title %}Payment Successful{% endblock %}
+
+{% block content %}
+<div class="alert alert-success">
+    <strong>✓ Payment Successful</strong><br>
+    Your transaction has been completed successfully.
+</div>
+
+<p class="greeting">Hi {{ user.first_name|default:"there" }},</p>
+
+<p class="message">
+    Great news! We've received your payment and it's been processed successfully. Here are the details of your transaction:
+</p>
+
+<div class="details-box">
+    <div class="detail-row">
+        <span class="detail-label">Amount Paid</span>
+        <span class="detail-value">{{ currency }} {{ amount }}</span>
+    </div>
+    <div class="detail-row">
+        <span class="detail-label">Reference</span>
+        <span class="detail-value">{{ reference }}</span>
+    </div>
+    <div class="detail-row">
+        <span class="detail-label">Date</span>
+        <span class="detail-value">{% now "F j, Y" %}</span>
+    </div>
+    <div class="detail-row">
+        <span class="detail-label">Status</span>
+        <span class="detail-value" style="color: #10b981;">✓ Confirmed</span>
+    </div>
+</div>
+
+<p class="message">
+    If you have any questions about this payment or need assistance, our support team is here to help.
+</p>
+
+<a href="#" class="cta-button">View Payment Details</a>
+
+<p class="message" style="margin-top: 30px;">
+    Thank you for choosing BillFlow!<br>
+    <strong>The BillFlow Team</strong>
+</p>
+{% endblock %}

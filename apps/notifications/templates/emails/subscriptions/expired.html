@@ -1,0 +1,38 @@
+{% extends "emails/_base.html" %}
+
+{% block title %}Subscription Expired{% endblock %}
+
+{% block content %}
+<div class="alert alert-warning">
+    <strong>⚠️ Subscription Expired</strong><br>
+    Your plan has ended. Reactivate to restore access.
+</div>
+
+<p class="greeting">Hi {{ user.first_name|default:"there" }},</p>
+
+<p class="message">
+    Your {{ plan_name }} subscription has expired and your access to premium features has been suspended. But don't worry — reactivating is quick and easy!
+</p>
+
+<div class="details-box">
+    <div class="detail-row">
+        <span class="detail-label">Expired Plan</span>
+        <span class="detail-value">{{ plan_name }}</span>
+    </div>
+    <div class="detail-row">
+        <span class="detail-label">Status</span>
+        <span class="detail-value" style="color: #ef4444;">● Expired</span>
+    </div>
+</div>
+
+<p class="message">
+    Reactivate your subscription now to restore full access to all features. Your data and settings are safe and will be waiting for you.
+</p>
+
+<a href="#" class="cta-button">Reactivate Subscription</a>
+
+<p class="message" style="margin-top: 30px;">
+    Need assistance? Contact us at <a href="mailto:support@billflow.app">support@billflow.app</a><br>
+    <strong>The BillFlow Team</strong>
+</p>
+{% endblock %}

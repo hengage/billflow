@@ -1,0 +1,46 @@
+{% extends "emails/_base.html" %}
+
+{% block title %}Subscription Renewed{% endblock %}
+
+{% block content %}
+<div class="alert alert-success">
+    <strong>🔄 Auto-Renewal Successful</strong><br>
+    Your subscription has been automatically renewed.
+</div>
+
+<p class="greeting">Hi {{ user.first_name|default:"there" }},</p>
+
+<p class="message">
+    Good news! Your {{ plan_name }} subscription has been automatically renewed and your service continues uninterrupted.
+</p>
+
+<div class="details-box">
+    <div class="detail-row">
+        <span class="detail-label">Plan</span>
+        <span class="detail-value">{{ plan_name }}</span>
+    </div>
+    <div class="detail-row">
+        <span class="detail-label">Amount Charged</span>
+        <span class="detail-value">{{ currency }} {{ amount }}</span>
+    </div>
+    <div class="detail-row">
+        <span class="detail-label">New Expiry Date</span>
+        <span class="detail-value">{{ end_date }}</span>
+    </div>
+    <div class="detail-row">
+        <span class="detail-label">Status</span>
+        <span class="detail-value" style="color: #10b981;">● Active</span>
+    </div>
+</div>
+
+<p class="message">
+    Your next renewal will happen automatically before the new expiry date. Manage your subscription anytime from your account.
+</p>
+
+<a href="#" class="cta-button">Manage Subscription</a>
+
+<p class="message" style="margin-top: 30px;">
+    Thank you for staying with us!<br>
+    <strong>The BillFlow Team</strong>
+</p>
+{% endblock %}

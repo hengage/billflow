@@ -1,0 +1,35 @@
+{% extends "emails/_base.html" %}
+
+{% block title %}Welcome to BillFlow{% endblock %}
+
+{% block content %}
+<p class="greeting">Welcome to BillFlow, {{ user.first_name|default:"there" }}! 🎉</p>
+
+<p class="message">
+    We're excited to have you join thousands of users who trust BillFlow for their bill payments, subscriptions, and financial management.
+</p>
+
+<p class="message">
+    <strong>Here's what you can do with BillFlow:</strong>
+</p>
+
+<div style="background: #fafafa; border-radius: 8px; padding: 20px; margin: 20px 0;">
+    <ul style="margin: 0; padding-left: 20px; color: #3f3f46; line-height: 1.8;">
+        <li>Pay bills instantly from your wallet</li>
+        <li>Set up automatic subscription renewals</li>
+        <li>Track all your payments in one place</li>
+        <li>Get notified before subscriptions expire</li>
+    </ul>
+</div>
+
+<a href="#" class="cta-button">Get Started</a>
+
+<p class="message" style="margin-top: 30px;">
+    If you have any questions, just reply to this email or contact us at <a href="mailto:support@billflow.app">support@billflow.app</a>. We're always here to help!
+</p>
+
+<p class="message">
+    Welcome aboard,<br>
+    <strong>The BillFlow Team</strong>
+</p>
+{% endblock %}

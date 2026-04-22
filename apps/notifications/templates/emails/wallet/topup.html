@@ -1,0 +1,42 @@
+{% extends "emails/_base.html" %}
+
+{% block title %}Wallet Top-Up Confirmed{% endblock %}
+
+{% block content %}
+<div class="alert alert-success">
+    <strong>💰 Wallet Credited</strong><br>
+    Your top-up was successful.
+</div>
+
+<p class="greeting">Hi {{ user.first_name|default:"there" }},</p>
+
+<p class="message">
+    Great news! Your BillFlow wallet has been successfully credited. The funds are available for immediate use.
+</p>
+
+<div class="details-box">
+    <div class="detail-row">
+        <span class="detail-label">Amount Added</span>
+        <span class="detail-value" style="color: #10b981;">+ ₦{{ amount }}</span>
+    </div>
+    <div class="detail-row">
+        <span class="detail-label">Date</span>
+        <span class="detail-value">{% now "F j, Y" %}</span>
+    </div>
+    <div class="detail-row">
+        <span class="detail-label">Status</span>
+        <span class="detail-value" style="color: #10b981;">● Confirmed</span>
+    </div>
+</div>
+
+<p class="message">
+    Your wallet balance is now ready to use for bill payments, subscriptions, and more.
+</p>
+
+<a href="#" class="cta-button">View Wallet</a>
+
+<p class="message" style="margin-top: 30px;">
+    Thank you for using BillFlow!<br>
+    <strong>The BillFlow Team</strong>
+</p>
+{% endblock %}
