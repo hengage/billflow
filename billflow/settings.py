@@ -22,6 +22,9 @@ TASK_SUBSCRIPTION_DISPATCH_EXPIRIES = "subscriptions.dispatch_expiries"
 TASK_SUBSCRIPTION_DISPATCH_AUTO_RENEWALS = "subscriptions.dispatch_auto_renewals"
 TASK_SUBSCRIPTION_ATTEMPT_AUTO_RENEWAL = "subscriptions.attempt_auto_renewal"
 
+# Celery queues
+TASK_QUEUE_AUTO_RENEWALS = 'subscriptions.auto_renewals'
+
 # Defines the project's root directory and adds the "apps" subdirectory  
 # to Python's module search path 
 BASE_DIR = get_project_root()
@@ -208,8 +211,9 @@ CELERY_TASK_ROUTES = {
     'payments.tasks.send_payment_success_notification': {'queue': 'notifications'},
     'payments.tasks.send_payment_failed_notification': {'queue': 'notifications'},
     'notifications.tasks.send_email_task': {'queue': 'notifications'},
-    TASK_SUBSCRIPTION_DISPATCH_AUTO_RENEWALS: {'queue': 'default'},
     TASK_SUBSCRIPTION_DISPATCH_EXPIRIES: {'queue': 'default'},
+    TASK_SUBSCRIPTION_DISPATCH_AUTO_RENEWALS: {'queue': TASK_QUEUE_AUTO_RENEWALS},
+    TASK_SUBSCRIPTION_ATTEMPT_AUTO_RENEWAL: {'queue': TASK_QUEUE_AUTO_RENEWALS},
 }
 
 # task message is only removed from the queue after

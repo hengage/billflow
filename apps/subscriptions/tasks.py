@@ -119,7 +119,7 @@ def dispatch_auto_renewals(batch_size=500):
     bind=True,
     max_retries=MAX_RETRIES,
     name=settings.TASK_SUBSCRIPTION_ATTEMPT_AUTO_RENEWAL,
-    queue='auto_renewals',
+    queue=settings.TASK_QUEUE_AUTO_RENEWALS,
     rate_limit='5/s',
 )
 def attempt_auto_renewal(self, subscription_id):
@@ -130,12 +130,12 @@ def attempt_auto_renewal(self, subscription_id):
     - Transient error: Celery retry with same idempotency key
     - Success: Task ends, webhook completes renewal
     """
-    from .services import RenewalProcessor
+    from .services import AutoRenewalProcessor
 
     logger.info(f"[attempt_auto_renewal] Task started for subscription {subscription_id}, retry {self.request.retries}")
 
     try:
-        processor = RenewalProcessor(subscription_id)
+        processor = AutoRenewalProcessor(subscription_id)
         logger.info(f"[attempt_auto_renewal] Processor initialized for {subscription_id}")
         result = processor.execute()
         logger.info(f"[attempt_auto_renewal] Processor.execute() completed for {subscription_id}, result: {result}")
