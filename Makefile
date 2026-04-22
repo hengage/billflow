@@ -1,4 +1,4 @@
-.PHONY: help build up down logs shell db-shell migrate migrations collectstatic create-app createsuperuser
+.PHONY: help build up down logs shell db-shell migrate migrations collectstatic create-app createsuperuser seed-plans
 
 help:
 	@echo "Available commands:"
@@ -14,6 +14,7 @@ help:
 	@echo "  make createsuperuser - Create Django superuser"
 	@echo "  make add-dep NAME=<package> - Install new Python package in container, then freeze"
 	@echo "  make create-app NAME=<app_name> - Create new Django app in apps directory"
+	@echo "  make seed-plans  - Seed default subscription plans"
 
 build:
 	docker-compose up --build
@@ -57,3 +58,6 @@ ifndef NAME
 	$(error NAME is undefined. Usage: make create-app NAME=<app_name>)
 endif
 	docker-compose exec web bash -c "mkdir -p apps/$(NAME) && touch apps/$(NAME)/__init__.py apps/$(NAME)/apps.py apps/$(NAME)/models.py apps/$(NAME)/serializers.py apps/$(NAME)/views.py apps/$(NAME)/urls.py apps/$(NAME)/permissions.py apps/$(NAME)/admin.py" apps/$(NAME)/migrations/__init__.py
+
+seed-plans:
+	docker-compose exec web python manage.py seed_plans

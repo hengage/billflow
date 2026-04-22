@@ -48,6 +48,11 @@ LOGGING = {
             "level": LOG_LEVEL,
             "propagate": False,
         },
+        "subscriptions": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
+        },
         "": {
             "handlers": ["console"],
             "level": LOG_LEVEL,

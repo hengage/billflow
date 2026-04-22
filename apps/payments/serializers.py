@@ -49,4 +49,4 @@ class PaymentHistorySerializer(serializers.ModelSerializer):
 class PaymentInitiateResponseSerializer(serializers.Serializer):
     """Response data for successful payment initiation."""
     checkout_url = serializers.URLField()
-    reference = serializers.UUIDField()
+    reference = serializers.CharField()

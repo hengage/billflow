@@ -27,7 +27,7 @@ class NonRetryableProviderError(APIException):
     """
     Raised when a payment provider permanently rejects a payment.
     Examples: invalid card number, account not found, currency not supported.
-    
+
     The processor will finalise the idempotency key with the error response
     so the client gets the same rejection on every retry without re-calling
     the provider. There is no point retrying — the outcome will not change.
@@ -35,6 +35,22 @@ class NonRetryableProviderError(APIException):
     status_code = 422
     default_detail = 'Payment was permanently rejected by the provider.'
     default_code = 'payment_rejected'
+
+
+class PaymentDeclined(NonRetryableProviderError):
+    """
+    Raised when a provider explicitly declines a charge.
+    Specifically for recurring charge attempts - card declined, insufficient funds etc.
+
+    provider_status_code: HTTP status code from provider (400 = validation error, no webhook expected)
+    """
+    status_code = 422
+    default_detail = 'Payment was declined.'
+    default_code = 'payment_declined'
+
+    def __init__(self, detail=None, code=None, provider_status_code=None):
+        super().__init__(detail, code)
+        self.provider_status_code = provider_status_code
 
 
 class ConflictError(APIException):

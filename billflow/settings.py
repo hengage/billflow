@@ -13,9 +13,17 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 from pathlib import Path
 import sys
 from datetime import timedelta
+from celery.schedules import crontab
 from utils.paths import get_project_root, get_apps_dir
 from decouple import config
 from .logging import LOGGING
+
+TASK_SUBSCRIPTION_DISPATCH_EXPIRIES = "subscriptions.dispatch_expiries"
+TASK_SUBSCRIPTION_DISPATCH_AUTO_RENEWALS = "subscriptions.dispatch_auto_renewals"
+TASK_SUBSCRIPTION_ATTEMPT_AUTO_RENEWAL = "subscriptions.attempt_auto_renewal"
+
+# Celery queues
+TASK_QUEUE_AUTO_RENEWALS = 'subscriptions.auto_renewals'
 
 # Defines the project's root directory and adds the "apps" subdirectory  
 # to Python's module search path 
@@ -44,6 +52,7 @@ INSTALLED_APPS = [
     "notifications.apps.NotificationsConfig",
     "wallets.apps.WalletsConfig",
     "payments.apps.PaymentsConfig",
+    "subscriptions.apps.SubscriptionsConfig",
    
     # Django core apps
     'django.contrib.admin',
@@ -202,6 +211,9 @@ CELERY_TASK_ROUTES = {
     'payments.tasks.send_payment_success_notification': {'queue': 'notifications'},
     'payments.tasks.send_payment_failed_notification': {'queue': 'notifications'},
     'notifications.tasks.send_email_task': {'queue': 'notifications'},
+    TASK_SUBSCRIPTION_DISPATCH_EXPIRIES: {'queue': 'default'},
+    TASK_SUBSCRIPTION_DISPATCH_AUTO_RENEWALS: {'queue': TASK_QUEUE_AUTO_RENEWALS},
+    TASK_SUBSCRIPTION_ATTEMPT_AUTO_RENEWAL: {'queue': TASK_QUEUE_AUTO_RENEWALS},
 }
 
 # task message is only removed from the queue after
@@ -215,10 +227,17 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'payments.tasks.reconcile_unprocessed_webhooks',
         'schedule': 60,  # every 1 minute (temporary for testing)
     },
+    'dispatch-subscription-expiries': {
+        'task': TASK_SUBSCRIPTION_DISPATCH_EXPIRIES,
+        'schedule': 600.0,  # 10 minutes in seconds
+    },
+    'dispatch-auto-renewals-every-2-minutes': {
+        'task': TASK_SUBSCRIPTION_DISPATCH_AUTO_RENEWALS,
+        'schedule': 120.0,  # every 2 minutes (temporary for testing)
+    },
 }
 
 ASGI_APPLICATION = 'billflow.asgi.application'
-
 
 AUTH_USER_MODEL = 'users.User'
 
@@ -291,3 +310,4 @@ SPECTACULAR_SETTINGS = {
 # Payment Provider API Keys
 PAYSTACK_SECRET_KEY = config('PAYSTACK_SECRET_KEY')
 STRIPE_SECRET_KEY = config('STRIPE_SECRET_KEY')
+STRIPE_WEBHOOK_SECRET = config('STRIPE_WEBHOOK_SECRET', default='')

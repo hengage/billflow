@@ -142,3 +142,107 @@ class PaystackProvider:
                 f'Paystack verification failed | ref={reference} | error={str(exc)}'
             )
             raise ThirdPartyServiceError()
+
+    @staticmethod
+    def extract_storable_method(data):
+        """
+        Extracts a storable payment method from a Paystack charge.success payload.
+        Returns None if the authorization is not reusable.
+
+        Paystack uses an explicit 'reusable' flag on the authorization object.
+        Only cards marked reusable can be charged recurrently.
+
+        Reference: https://paystack.com/docs/payments/recurring-charges/
+        """
+        from payments.services.storable_payment_method import StorablePaymentMethod
+
+        authorization = data.get('authorization', {})
+
+        # Paystack's explicit reusability flag — check before storing
+        if not authorization.get('reusable'):
+            return None
+
+        signature = authorization.get('signature', '')
+        if not signature:
+            return None
+
+        return StorablePaymentMethod(
+            authorization_code=authorization.get('authorization_code', ''),
+            provider_customer_id=data.get('customer', {}).get('customer_code', ''),
+            billing_email=data.get('customer', {}).get('email', ''),
+            signature=signature,
+            last_four=authorization.get('last4', ''),
+            card_brand=authorization.get('brand', ''),
+            exp_month=authorization.get('exp_month', ''),
+            exp_year=authorization.get('exp_year', ''),
+            bank=authorization.get('bank', ''),
+            card_type=authorization.get('card_type', ''),
+        )
+
+    @classmethod
+    def charge_authorization(cls, authorization_code, email, amount, reference, purpose, metadata=None):
+        """
+        Charges a stored authorization code for recurring payments.
+        Used by AutoRenewalProcessor for subscription auto-renewal.
+
+        Endpoint: POST /transaction/charge_authorization
+        Reference: https://paystack.com/docs/payments/recurring-charges/
+        """
+        from api_response.exceptions import PaymentDeclined
+
+        payload = {
+            'authorization_code': authorization_code,
+            'email': email,  # Must be the email used when the authorization was created
+            'amount': to_minor(amount),
+            'reference': reference,
+            'metadata': {
+                'purpose': purpose,
+                **(metadata or {}),
+            },
+        }
+
+        try:
+            response = requests.post(
+                f'{cls.BASE_URL}/transaction/charge_authorization',
+                json=payload,
+                headers=cls._get_headers(),
+                timeout=30,
+            )
+        except requests.exceptions.RequestException as exc:
+            raise ThirdPartyServiceError()
+
+        # Check for validation errors (400/422) - no transaction created, no webhook
+        if response.status_code in PAYSTACK_NON_RETRYABLE_STATUS_CODES:
+            error_data = response.json()
+            error_message = error_data.get('message', 'Card declined.')
+            error_type = error_data.get('type', '')
+            logger.warning(
+                f'Paystack charge_authorization declined | ref={reference} | '
+                f'status={response.status_code} | type={error_type} | message={error_message}'
+            )
+            raise PaymentDeclined(error_message, provider_status_code=response.status_code)
+
+        data = response.json()
+        if not data.get('status'):
+            # HTTP 200 but charge failed - transaction exists, webhook will come
+            raise PaymentDeclined(data.get('message', 'Charge failed.'))
+
+        return {
+            'provider_ref': data['data']['reference'],
+            'status': data['data']['status'],
+        }
+
+    @classmethod
+    def charge_stored(cls, stored_method, amount, reference, purpose, metadata=None):
+        """
+        Strategy interface for charging a stored payment method.
+        Delegates to charge_authorization with Paystack-specific field mapping.
+        """
+        return cls.charge_authorization(
+            authorization_code=stored_method.authorization_code,
+            email=stored_method.billing_email,
+            amount=amount,
+            reference=reference,
+            purpose=purpose,
+            metadata=metadata,
+        )

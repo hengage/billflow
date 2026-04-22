@@ -11,18 +11,20 @@ class PaymentStatus(models.TextChoices):
 
 class PaymentPurpose(models.TextChoices):
     WALLET_TOPUP = 'wallet_topup', _('Wallet Top-up')
-    SUBSCRIPTION = 'subscription', _('Subscription Payment')
+    SUBSCRIPTION = 'subscription', _('New Subscription')
+    RENEW_SUBSCRIPTION = 'renew_subscription', _('Subscription Renewal')
+    SWITCH_PLAN = 'switch_plan', _('Plan Switch')
 
 
 class PaymentProvider(models.TextChoices):
     PAYSTACK = 'paystack', _('Paystack')
     STRIPE = 'stripe', _('Stripe')
+    WALLET = 'wallet', _('Wallet')
 
 
 class IdempotencyRecoveryPoint(models.TextChoices):
     STARTED = 'started', _('Started')
     PAYMENT_CREATED = 'payment_created', _('Payment Created')
-    PROVIDER_INITIALIZED = 'provider_initialized', _('Provider Initialized')
     FINISHED = 'finished', _('Finished')
 
 
