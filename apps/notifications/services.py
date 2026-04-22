@@ -1,3 +1,4 @@
+import re
 from django.contrib.auth import get_user_model
 from .models import Notification, UserNotificationPreferences
 from .constants import (
@@ -6,7 +7,8 @@ from .constants import (
     NotificationGroup,
     NOTIFICATION_TYPE_GROUP_MAP,
 )
-from .tasks import send_email_task
+from .services.email_providers import get_email_provider
+from .services.template_renderer import TemplateRenderer
 
 User = get_user_model()
 
@@ -62,19 +64,29 @@ class NotificationService:
         )
 
     @classmethod
-    def _dispatch_email(cls, user, prefs, notification_type, subject, message, html_message=None):
-        """
-        Dispatch an email notification if the user has enabled it for this notification type.
-        """
+    def _dispatch_email(cls, user, prefs, notification_type, subject, template_name, context):
+        """Render HTML template and dispatch via configured email provider."""
         if not cls._should_send_email(prefs, notification_type):
             return
-        cls._log(user, notification_type, NotificationChannel.EMAIL, message)
-        send_email_task.delay(
-            user_id=str(user.id),
+
+        html_content = TemplateRenderer.render(template_name, context)
+        plain_preview = cls._extract_preview(html_content)
+        cls._log(user, notification_type, NotificationChannel.EMAIL, plain_preview)
+
+        provider = get_email_provider()
+        provider.send(
+            to=[user.email],
             subject=subject,
-            message=message,
-            html_message=html_message,
+            html_content=html_content,
+            tags={'notification_type': notification_type, 'user_id': str(user.id)}
         )
+
+    @staticmethod
+    def _extract_preview(html_content, length=200):
+        """Extract plain text preview from HTML for logging."""
+        text = re.sub(r'<[^>]+>', ' ', html_content)
+        text = re.sub(r'\s+', ' ', text).strip()
+        return text[:length] + '...' if len(text) > length else text
 
     @classmethod
     def _dispatch_push(cls, user, prefs, notification_type, message):
@@ -87,14 +99,12 @@ class NotificationService:
         # push_task.delay(user_id=str(user.id), message=message)
 
     @classmethod
-    def _dispatch(cls, user, notification_type, subject, message, html_message=None):
-        """
-        Central dispatch method. Fetches preferences once and passes them
-        to both _dispatch_email and _dispatch_push — avoids two DB hits.
-        """
+    def _dispatch(cls, user, notification_type, subject, template_name, context):
+        """Central dispatch - handles email (templated) and push."""
         prefs = cls._get_preferences(user)
-        cls._dispatch_email(user, prefs, notification_type, subject, message, html_message)
-        cls._dispatch_push(user, prefs, notification_type, message)
+        cls._dispatch_email(user, prefs, notification_type, subject, template_name, context)
+        plain_message = cls._extract_preview(TemplateRenderer.render(template_name, context), 100)
+        cls._dispatch_push(user, prefs, notification_type, plain_message)
 
     # -------------------------------------------------------------------------
     # Public methods — one per notification event
@@ -102,119 +112,177 @@ class NotificationService:
 
     @classmethod
     def send_payment_success(cls, user, payment):
-        """
-        Send a payment success notification to the user.
-        """
-        message = (
-            f'Hi {user.first_name},\n\n'
-            f'Your payment of {payment.amount} {payment.currency} was successful.\n'
-            f'Reference: {payment.reference}\n\n'
-            f'Thank you for using BillFlow.'
+        """Payment succeeded notification."""
+        cls._dispatch(
+            user=user,
+            notification_type=NotificationType.PAYMENT_SUCCESS,
+            subject='Payment Successful',
+            template_name='payment_success',
+            context={
+                'user': user,
+                'payment': payment,
+                'amount': str(payment.amount),
+                'currency': payment.currency,
+                'reference': str(payment.reference),
+            }
         )
-        cls._dispatch(user, NotificationType.PAYMENT_SUCCESS, 'Payment Successful', message)
 
     @classmethod
     def send_payment_failed(cls, user, payment):
-        """
-        Send a payment failed notification to the user.
-        """
-        message = (
-            f'Hi {user.first_name},\n\n'
-            f'Your payment of {payment.amount} {payment.currency} failed.\n'
-            f'Reference: {payment.reference}\n\n'
-            f'Please try again or contact support.'
+        """Payment failed notification."""
+        cls._dispatch(
+            user=user,
+            notification_type=NotificationType.PAYMENT_FAILED,
+            subject='Payment Failed',
+            template_name='payment_failed',
+            context={
+                'user': user,
+                'payment': payment,
+                'amount': str(payment.amount),
+                'currency': payment.currency,
+                'reference': str(payment.reference),
+            }
         )
-        cls._dispatch(user, NotificationType.PAYMENT_FAILED, 'Payment Failed', message)
 
     @classmethod
     def send_wallet_topup(cls, user, amount):
-        """
-        Send a wallet top-up notification to the user.
-        """
-        message = (
-            f'Hi {user.first_name},\n\n'
-            f'Your wallet has been credited with {amount} NGN.\n\n'
-            f'Thank you for using BillFlow.'
+        """Wallet top-up notification."""
+        cls._dispatch(
+            user=user,
+            notification_type=NotificationType.WALLET_TOPUP,
+            subject='Wallet Top-Up Confirmed',
+            template_name='wallet_topup',
+            context={
+                'user': user,
+                'amount': str(amount),
+            }
         )
-        cls._dispatch(user, NotificationType.WALLET_TOPUP, 'Wallet Top-Up Confirmed', message)
 
     @classmethod
     def send_subscription_activated(cls, user, plan):
-        """
-        Send a subscription activated notification to the user.
-        """
-        message = (
-            f'Hi {user.first_name},\n\n'
-            f'Your subscription to the {plan.name} plan has been activated.\n\n'
-            f'Thank you for using BillFlow.'
+        """Subscription activated notification."""
+        cls._dispatch(
+            user=user,
+            notification_type=NotificationType.SUBSCRIPTION_ACTIVATED,
+            subject='Subscription Activated',
+            template_name='subscription_activated',
+            context={
+                'user': user,
+                'plan': plan,
+                'plan_name': plan.name,
+            }
         )
-        cls._dispatch(user, NotificationType.SUBSCRIPTION_ACTIVATED, 'Subscription Activated', message)
 
     @classmethod
     def send_subscription_expiring(cls, user, plan, end_date):
-        """
-        Send a subscription expiring notification to the user.
-        """
-        message = (
-            f'Hi {user.first_name},\n\n'
-            f'Your {plan.name} subscription expires on {end_date}.\n'
-            f'Renew now to avoid interruption.\n\n'
-            f'Thank you for using BillFlow.'
+        """Subscription expiring soon notification."""
+        cls._dispatch(
+            user=user,
+            notification_type=NotificationType.SUBSCRIPTION_EXPIRING,
+            subject='Subscription Expiring Soon',
+            template_name='subscription_expiring',
+            context={
+                'user': user,
+                'plan': plan,
+                'plan_name': plan.name,
+                'end_date': end_date.strftime('%Y-%m-%d') if hasattr(end_date, 'strftime') else str(end_date),
+            }
         )
-        cls._dispatch(user, NotificationType.SUBSCRIPTION_EXPIRING, 'Subscription Expiring Soon', message)
 
     @classmethod
     def send_subscription_expired(cls, user, plan):
-        """
-        Send a subscription expired notification to the user.
-        """
-        message = (
-            f'Hi {user.first_name},\n\n'
-            f'Your {plan.name} subscription has expired.\n'
-            f'Subscribe again to continue using BillFlow.\n\n'
-            f'Thank you for using BillFlow.'
+        """Subscription expired notification."""
+        cls._dispatch(
+            user=user,
+            notification_type=NotificationType.SUBSCRIPTION_EXPIRED,
+            subject='Subscription Expired',
+            template_name='subscription_expired',
+            context={
+                'user': user,
+                'plan': plan,
+                'plan_name': plan.name,
+            }
         )
-        cls._dispatch(user, NotificationType.SUBSCRIPTION_EXPIRED, 'Subscription Expired', message)
 
     @classmethod
     def send_subscription_renewed(cls, user, subscription, payment):
-        """
-        Send a subscription renewed notification to the user.
-        Called when auto-renewal succeeds.
-        """
-        message = (
-            f'Hi {user.first_name},\n\n'
-            f'Your {subscription.plan.name} subscription has been automatically renewed.\n'
-            f'Amount charged: {payment.amount} {payment.currency}\n'
-            f'New expiry date: {subscription.end_date_utc}\n\n'
-            f'Thank you for using BillFlow.'
-        )
+        """Subscription auto-renewed notification."""
         cls._dispatch(
-            user,
-            NotificationType.SUBSCRIPTION_RENEWED,
-            'Subscription Renewed',
-            message
+            user=user,
+            notification_type=NotificationType.SUBSCRIPTION_RENEWED,
+            subject='Subscription Renewed',
+            template_name='subscription_renewed',
+            context={
+                'user': user,
+                'subscription': subscription,
+                'payment': payment,
+                'plan_name': subscription.plan.name,
+                'amount': str(payment.amount),
+                'currency': payment.currency,
+                'end_date': subscription.end_date_utc.strftime('%Y-%m-%d'),
+            }
         )
 
     @classmethod
     def send_renewal_failed(cls, user, subscription, attempts_remaining):
-        """
-        Send a renewal failed notification to the user.
-        Called when auto-renewal charge is declined.
-        """
-        message = (
-            f'Hi {user.first_name},\n\n'
-            f'We were unable to automatically renew your {subscription.plan.name} subscription.\n'
-            f'Please update your payment method to avoid service interruption.\n'
-        )
-        if attempts_remaining > 0:
-            message += f'We will retry {attempts_remaining} more time(s).\n\n'
-        else:
-            message += 'This was your final retry. Your subscription will expire soon.\n\n'
-        message += 'Thank you for using BillFlow.'
+        """Auto-renewal failed notification."""
         cls._dispatch(
-            user,
-            NotificationType.RENEWAL_FAILED,
-            'Renewal Failed - Action Required',
-            message
+            user=user,
+            notification_type=NotificationType.RENEWAL_FAILED,
+            subject='Renewal Failed - Action Required',
+            template_name='renewal_failed',
+            context={
+                'user': user,
+                'subscription': subscription,
+                'plan_name': subscription.plan.name,
+                'attempts_remaining': attempts_remaining,
+                'final_attempt': attempts_remaining == 0,
+            }
+        )
+
+    @classmethod
+    def send_subscription_cancelled(cls, user, plan):
+        """Subscription cancelled notification."""
+        cls._dispatch(
+            user=user,
+            notification_type=NotificationType.SUBSCRIPTION_CANCELLED,
+            subject='Subscription Cancelled',
+            template_name='subscription_cancelled',
+            context={
+                'user': user,
+                'plan': plan,
+                'plan_name': plan.name,
+            }
+        )
+
+    @classmethod
+    def send_plan_switched(cls, user, old_plan, new_plan, subscription):
+        """Plan switched notification."""
+        cls._dispatch(
+            user=user,
+            notification_type=NotificationType.PLAN_SWITCHED,
+            subject='Plan Switched Successfully',
+            template_name='plan_switched',
+            context={
+                'user': user,
+                'old_plan': old_plan,
+                'new_plan': new_plan,
+                'subscription': subscription,
+                'old_plan_name': old_plan.name,
+                'new_plan_name': new_plan.name,
+                'end_date': subscription.end_date_utc.strftime('%Y-%m-%d'),
+            }
+        )
+
+    @classmethod
+    def send_welcome(cls, user):
+        """Welcome email for new users."""
+        cls._dispatch(
+            user=user,
+            notification_type=NotificationType.WELCOME,
+            subject='Welcome to BillFlow',
+            template_name='welcome',
+            context={
+                'user': user,
+            }
         )
