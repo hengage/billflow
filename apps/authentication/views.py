@@ -37,6 +37,14 @@ class RegisterView(APIView):
 
         if serializer.is_valid():
             user = serializer.save()
+
+            # Send welcome email
+            from django.db import transaction
+            from notifications.services import NotificationService
+            transaction.on_commit(
+                lambda: NotificationService.send_welcome(user=user)
+            )
+
             return created(
                 data={'user': UserProfileSerializer(user).data},
                 message='Account created successfully.'

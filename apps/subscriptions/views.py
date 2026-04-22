@@ -341,6 +341,17 @@ class CancelSubscriptionView(APIView):
     def post(self, request):
         try:
             subscription = SubscriptionService.cancel(request.user)
+
+            # Notify user of cancellation
+            from django.db import transaction
+            from notifications.services import NotificationService
+            transaction.on_commit(
+                lambda: NotificationService.send_subscription_cancelled(
+                    user=request.user,
+                    plan=subscription.plan
+                )
+            )
+
             return success(
                 data=SubscriptionSerializer(subscription).data,
                 message='Subscription cancelled successfully.',
@@ -381,20 +392,34 @@ class SwitchPlanView(APIView):
 
         return self._handle_direct_switch(request, plan, serializer.validated_data)
 
-    def _handle_wallet_switch(self, user, plan, billing_cycle):
+    def _handle_wallet_switch(self, user, new_plan, billing_cycle):
+        # Get current subscription (old plan) before switching
+        from .models import Subscription
+        old_subscription = Subscription.objects.filter(
+            user=user,
+            status=Subscription.Status.ACTIVE
+        ).select_related('plan').first()
+        old_plan = old_subscription.plan if old_subscription else None
+
         try:
             subscription = SubscriptionService.switch_plan_via_wallet(
                 user=user,
-                new_plan=plan,
+                new_plan=new_plan,
                 billing_cycle=billing_cycle,
             )
 
-            # Queue notification after successful switch
+            # Notify user of plan switch
             from django.db import transaction
             from notifications.services import NotificationService
-            transaction.on_commit(
-                lambda: NotificationService.send_subscription_activated(user, plan)
-            )
+            if old_plan:
+                transaction.on_commit(
+                    lambda: NotificationService.send_plan_switched(
+                        user=user,
+                        old_plan=old_plan,
+                        new_plan=new_plan,
+                        subscription=subscription
+                    )
+                )
 
             return created(
                 data=SubscriptionSerializer(subscription).data,
