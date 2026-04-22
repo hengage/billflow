@@ -296,6 +296,7 @@ class RenewView(APIView):
             'amount': str(amount),
             'provider': validated_data['provider'],
             'purpose': PaymentPurpose.RENEW_SUBSCRIPTION.value,
+            'subscription_id': str(existing_sub.id),
             'plan_id': str(plan.id),
             'billing_cycle': billing_cycle,
         }
