@@ -6,7 +6,7 @@ from django.contrib.auth import get_user_model
 logger = logging.getLogger(__name__)
 User = get_user_model()
 
-MAX_RETRIES = 5
+MAX_RETRIES = 3
 BASE_DELAY = 60
 MAX_DELAY = 3600
 
@@ -55,10 +55,7 @@ class WebhookTaskBase(Task):
                     ),
                 )
             except Exception as update_exc:
-                logger.error(
-                    f'Failed to mark webhook as permanently failed | '
-                    f'log={log_id} | error={str(update_exc)}'
-                )
+                logger.error(f'Failed to mark webhook as permanently failed | log={log_id} | error={str(update_exc)}')
 
         logger.critical(
             f'WEBHOOK PERMANENTLY FAILED — requires manual review | '

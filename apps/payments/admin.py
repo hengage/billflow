@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import IdempotencyKey, Payment, WebhookLog
+from .models import IdempotencyKey, Payment, WebhookLog, StoredPaymentMethod
 
 
 @admin.register(IdempotencyKey)
@@ -18,10 +18,18 @@ class IdempotencyKeyAdmin(admin.ModelAdmin):
 
 @admin.register(Payment)
 class PaymentAdmin(admin.ModelAdmin):
-    list_display = ('user', 'provider', 'amount', 'currency', 'status', 'purpose', 'created_at')
+    list_display = ('user', 'provider', 'amount', 'currency', 'status', 'purpose', 'created_at_secs', 'updated_at_secs')
     list_filter = ('provider', 'status', 'purpose')
     search_fields = ('user__email', 'reference')
-    readonly_fields = ('id', 'idempotency_key', 'created_at', 'updated_at')
+    readonly_fields = ('id', 'idempotency_key', 'created_at_secs', 'updated_at_secs')
+
+    def created_at_secs(self, obj):
+        return obj.created_at.strftime('%Y-%m-%d %H:%M:%S')
+    created_at_secs.short_description = 'Created at'
+
+    def updated_at_secs(self, obj):
+        return obj.updated_at.strftime('%Y-%m-%d %H:%M:%S')
+    updated_at_secs.short_description = 'Updated at'
 
     def has_delete_permission(self, request, obj=None):
         # Payment records are an immutable audit trail — never delete
@@ -30,9 +38,61 @@ class PaymentAdmin(admin.ModelAdmin):
 
 @admin.register(WebhookLog)
 class WebhookLogAdmin(admin.ModelAdmin):
-    list_display = ('provider', 'event_type', 'processed', 'received_at')
+    list_display = ('provider', 'event_type', 'reference', 'processed', 'permanently_failed', 'received_at')
     list_filter = ('provider', 'processed', 'permanently_failed')
-    readonly_fields = ('id', 'provider', 'event_type', 'payload', 'received_at', 'failure_reason')
+    search_fields = ('reference', 'event_type')
+    readonly_fields = ('id', 'provider', 'event_type', 'reference', 'payload', 'received_at', 'failure_reason')
+    actions = ['reprocess_webhooks']
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    @admin.action(description='Reprocess selected webhooks')
+    def reprocess_webhooks(self, request, queryset):
+        """Manually trigger webhook processing for selected logs."""
+        from payments.services.webhook_handler import WebhookHandler
+
+        processed_count = 0
+        skipped_count = 0
+
+        for log in queryset:
+            if log.processed or log.permanently_failed:
+                skipped_count += 1
+                continue
+
+            try:
+                WebhookHandler.process(str(log.id), log.provider)
+                processed_count += 1
+            except Exception as exc:
+                self.message_user(
+                    request,
+                    f'Failed to reprocess webhook {log.id}: {str(exc)}',
+                    level='error'
+                )
+
+        if processed_count:
+            self.message_user(
+                request,
+                f'Successfully reprocessed {processed_count} webhook(s).',
+                level='success'
+            )
+        if skipped_count:
+            self.message_user(
+                request,
+                f'Skipped {skipped_count} webhook(s) (already processed or permanently failed).',
+                level='warning'
+            )
+
+
+@admin.register(StoredPaymentMethod)
+class StoredPaymentMethodAdmin(admin.ModelAdmin):
+    list_display = ('user', 'provider', 'last_four', 'card_brand', 'exp_month', 'exp_year', 'is_default', 'is_active')
+    list_filter = ('provider', 'is_active', 'is_default', 'card_brand')
+    search_fields = ('user__email', 'last_four', 'billing_email')
+    readonly_fields = ('id', 'authorization_code', 'provider_customer_id', 'signature', 'created_at', 'updated_at')
 
     def has_add_permission(self, request):
         return False
