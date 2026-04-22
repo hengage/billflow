@@ -42,11 +42,10 @@ class SubscriptionSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
-class SubscribeSerializer(serializers.Serializer):
+class BaseSubscriptionSerializer(serializers.Serializer):
     """
-    Validates a subscription request.
+    Base fields for subscription operations (subscribe, renew, switch-plan).
     """
-    plan_id = serializers.UUIDField()
     billing_cycle = serializers.ChoiceField(
         choices=Subscription.BillingCycle.choices
     )
@@ -67,26 +66,22 @@ class SubscribeSerializer(serializers.Serializer):
         return attrs
 
 
-class SwitchPlanSerializer(serializers.Serializer):
+class SubscribeSerializer(BaseSubscriptionSerializer):
+    """
+    Validates a new subscription request.
+    """
+    plan_id = serializers.UUIDField()
+
+
+class RenewSerializer(BaseSubscriptionSerializer):
+    """
+    Validates a subscription renewal request.
+    Uses existing plan - plan_id not required.
+    """
+
+
+class SwitchPlanSerializer(BaseSubscriptionSerializer):
     """
     Validates a plan switch request.
     """
     plan_id = serializers.UUIDField()
-    billing_cycle = serializers.ChoiceField(
-        choices=Subscription.BillingCycle.choices
-    )
-    payment_method = serializers.ChoiceField(
-        choices=[PaymentMethod.WALLET, PaymentMethod.DIRECT]
-    )
-    # Only required when payment_method is DIRECT
-    provider = serializers.ChoiceField(
-        choices=['paystack', 'stripe'],
-        required=False,
-    )
-
-    def validate(self, attrs):
-        if attrs['payment_method'] == PaymentMethod.DIRECT and not attrs.get('provider'):
-            raise serializers.ValidationError(
-                {'provider': 'provider is required for direct payments.'}
-            )
-        return attrs

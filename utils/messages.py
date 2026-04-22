@@ -23,9 +23,13 @@ VALIDATION_MESSAGES = {
     'INVALID_REQUEST': 'Invalid request.',
     'PERMISSION_DENIED': 'You do not have permission to perform this action.',
     'NOT_FOUND': '{resource} not found.',
-    'SERVER_ERROR': 'Something went wrong. Please try again later.',
     'AMOUNT_MAX_LIMIT': 'Amount cannot exceed 1,000,000.',
     'AMOUNT_MIN_LIMIT': 'Minimum amount is 100.',
+}
+
+# System/internal error messages
+SYSTEM_MESSAGES = {
+    'SERVER_ERROR': 'Something went wrong. Please try again later.',
 }
 
 # Notification messages
@@ -84,13 +88,14 @@ def get_message(key, category='VALIDATION', **kwargs):
     categories = {
         'WALLET': WALLET_MESSAGES,
         'VALIDATION': VALIDATION_MESSAGES,
+        'SYSTEM': SYSTEM_MESSAGES,
         'NOTIFICATION': NOTIFICATION_MESSAGES,
         'AUTH': AUTH_MESSAGES,
         'PAYMENT': PAYMENT_MESSAGES,
         'SUBSCRIPTION': SUBSCRIPTION_MESSAGES,
     }
-    
-    message_dict = categories.get(category, VALIDATION_MESSAGES)
+
+    message_dict = categories.get(category, SYSTEM_MESSAGES)
     message = message_dict.get(key, 'An error occurred.')
     
     if kwargs:

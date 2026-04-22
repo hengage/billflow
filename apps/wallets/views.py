@@ -5,6 +5,7 @@ from rest_framework.exceptions import ValidationError
 from django.core.cache import cache
 from api_response.helpers import success, fail
 from api_response.exceptions import ConflictError
+from utils.messages import SYSTEM_MESSAGES, PAYMENT_MESSAGES
 import logging
 
 logger = logging.getLogger(__name__)
@@ -66,7 +67,6 @@ class WalletTopUpView(APIView):
 
         from payments.services.processor import PaymentProcessor
         from payments.constants import PaymentPurpose
-        from utils.messages import PAYMENT_MESSAGES
 
         request_params = {
             'amount': str(serializer.validated_data['amount']),
@@ -101,16 +101,15 @@ class WalletTopUpView(APIView):
             )
         except ValidationError as exc:
             return fail(
-                message=str(exc),
-                error={'detail': str(exc)},
+                message='Validation failed.',
+                error=exc.detail,
                 status_code=status.HTTP_400_BAD_REQUEST,
             )
         except Exception as exc:
             logger.exception('Wallet top-up failed')
             return fail(
-                message='Payment service temporarily unavailable.',
-                error={'detail': str(exc)},
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                message=SYSTEM_MESSAGES['SERVER_ERROR'],
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
 

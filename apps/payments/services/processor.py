@@ -211,7 +211,7 @@ class PaymentProcessor:
         return {
             k: str(v) for k, v in request_params.items()
             if k not in core_params and v is not None
-        } or None
+        }
 
     def _call_provider(self, payment):
         """

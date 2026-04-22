@@ -11,6 +11,7 @@ from .serializers import (
     PlanSerializer,
     SubscriptionSerializer,
     SubscribeSerializer,
+    RenewSerializer,
     SwitchPlanSerializer,
 )
 from .services import SubscriptionService
@@ -204,7 +205,7 @@ class RenewView(APIView):
     permission_classes = (IsAuthenticated,)
 
     def post(self, request):
-        serializer = SubscribeSerializer(data=request.data)
+        serializer = RenewSerializer(data=request.data)
         if not serializer.is_valid():
             return fail(message='Validation failed.', error=serializer.errors)
 
