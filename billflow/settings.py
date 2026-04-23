@@ -53,6 +53,7 @@ INSTALLED_APPS = [
     "wallets.apps.WalletsConfig",
     "payments.apps.PaymentsConfig",
     "subscriptions.apps.SubscriptionsConfig",
+    "infra.apps.InfraConfig",
    
     # Django core apps
     'django.contrib.admin',
