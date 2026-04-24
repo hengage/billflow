@@ -19,6 +19,7 @@ Usage:
     drainer.drain()
 """
 import logging
+import random
 import time
 import uuid
 from datetime import timedelta
@@ -43,10 +44,11 @@ end
 """
 
 # Default empty queue backoff - exponential to reduce DB load when idle
-DEFAULT_EMPTY_BACKOFF_SECONDS = [2, 5, 10, 20, 30, 120, 300]
+# Max 60s with jitter to prevent thundering herd across multiple drainers
+DEFAULT_EMPTY_BACKOFF_SECONDS = [2, 5, 10, 20, 30, 45, 60]
 
-# Default lock timeout (5 minutes) - covers slow DB queries, GC pauses
-DEFAULT_LOCK_TIMEOUT_SECONDS = 300
+# Default lock timeout (3 minutes) - covers max backoff + processing
+DEFAULT_LOCK_TIMEOUT_SECONDS = 180
 
 
 class OutboxDrainer:
@@ -155,10 +157,12 @@ class OutboxDrainer:
             
             if not batch:
                 # Exponential backoff when empty to reduce DB load
-                sleep_time = self.empty_backoff_seconds[
+                base_sleep = self.empty_backoff_seconds[
                     min(empty_attempts, len(self.empty_backoff_seconds) - 1)
                 ]
-                logger.info(f'[{self.domain}] Empty batch, backing off for {sleep_time}s')
+                # Add jitter (±25%) to prevent thundering herd across drainers
+                sleep_time = int(base_sleep * random.uniform(0.75, 1.25))
+                logger.info(f'[{self.domain}] Empty batch, backing off for {sleep_time}s (base={base_sleep}s)')
                 time.sleep(sleep_time)
                 empty_attempts += 1
                 
