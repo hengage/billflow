@@ -48,6 +48,7 @@ class TemplateRenderer:
         template_path = cls.TEMPLATES.get(template_name)
         
         if not template_path:
+            print(f"Template not found: {template_name}")
             # Fallback to plain text if template not found
             return cls._render_plain_text(template_name, context)
         

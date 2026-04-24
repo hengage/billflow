@@ -36,14 +36,8 @@ class RegisterView(APIView):
         print(serializer.errors)
 
         if serializer.is_valid():
-            user = serializer.save()
-
-            # Send welcome email
-            from django.db import transaction
-            from notifications.services import NotificationService
-            transaction.on_commit(
-                lambda: NotificationService.send_welcome(user=user)
-            )
+            from .services import AuthService
+            user = AuthService.register_user(**serializer.validated_data)
 
             return created(
                 data={'user': UserProfileSerializer(user).data},

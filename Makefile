@@ -1,10 +1,11 @@
-.PHONY: help build up down logs shell db-shell migrate migrations collectstatic create-app createsuperuser seed-plans
+.PHONY: help build up down restart logs shell db-shell migrate migrations collectstatic create-app createsuperuser seed-plans
 
 help:
 	@echo "Available commands:"
 	@echo "  make build     - Build all Docker images (Also starts all services)"
 	@echo "  make up        - Start all services"
 	@echo "  make down      - Stop and remove all services"
+	@echo "  make restart   - Restart all services (reloads env vars)"
 	@echo "  make logs      - Show logs from all services"
 	@echo "  make shell     - Open Django shell in web container"
 	@echo "  make db-shell  - Open PostgreSQL shell"
@@ -24,6 +25,9 @@ up:
 
 down:
 	docker-compose down
+
+restart:
+	docker-compose down && docker-compose up -d
 
 logs:
 	docker-compose logs -f
@@ -57,7 +61,7 @@ create-app:
 ifndef NAME
 	$(error NAME is undefined. Usage: make create-app NAME=<app_name>)
 endif
-	docker-compose exec web bash -c "mkdir -p apps/$(NAME) && touch apps/$(NAME)/__init__.py apps/$(NAME)/apps.py apps/$(NAME)/models.py apps/$(NAME)/serializers.py apps/$(NAME)/views.py apps/$(NAME)/urls.py apps/$(NAME)/permissions.py apps/$(NAME)/admin.py" apps/$(NAME)/migrations/__init__.py
+	docker-compose exec web bash -c "mkdir -p apps/$(NAME) && mkdir -p apps/$(NAME)/migrations && touch apps/$(NAME)/__init__.py apps/$(NAME)/apps.py apps/$(NAME)/models.py apps/$(NAME)/serializers.py apps/$(NAME)/views.py apps/$(NAME)/urls.py apps/$(NAME)/permissions.py apps/$(NAME)/admin.py apps/$(NAME)/migrations/__init__.py"
 
 seed-plans:
 	docker-compose exec web python manage.py seed_plans
