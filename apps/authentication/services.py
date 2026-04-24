@@ -55,7 +55,7 @@ class AuthService:
             user=user,
             notification_type=NotificationType.WELCOME,
             subject='Welcome to BillFlow!',
-            template_name='users/welcome',
+            template_name='welcome',
             context={
                 'user': {
                     'first_name': user.first_name,
