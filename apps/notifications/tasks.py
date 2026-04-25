@@ -72,8 +72,11 @@ def send_notification_from_outbox(self, outbox_id, user_id, email, notification_
     try:
         user = User.objects.get(id=user_id)
     except User.DoesNotExist:
-        # Mark as sent to avoid retrying for deleted users
-        Outbox.objects.filter(id=outbox_id).update(status=Outbox.Status.SENT)
+        # Permanent failure - user deleted
+        Outbox.objects.filter(id=outbox_id).update(
+            status=Outbox.Status.FAILED,
+            last_error='User not found (deleted)'
+        )
         return {'status': 'user_not_found', 'outbox_id': outbox_id}
     
     try:
@@ -86,16 +89,22 @@ def send_notification_from_outbox(self, outbox_id, user_id, email, notification_
             context=context,
         )
         
-        # Mark outbox entry as sent
+        # Successfully delivered - mark as sent
         Outbox.objects.filter(id=outbox_id).update(status=Outbox.Status.SENT)
         
         return {'status': 'sent', 'outbox_id': outbox_id}
         
     except Exception as exc:
-        # Log error, update outbox with error info
-        Outbox.objects.filter(id=outbox_id).update(
-            last_error=f'{type(exc).__name__}: {str(exc)}'[:500]
-        )
+        # Max retries exhausted - mark as failed with error
+        if self.request.retries >= MAX_RETRIES:
+            error_msg = f'{type(exc).__name__}: {str(exc)}'[:500]
+            Outbox.objects.filter(id=outbox_id).update(
+                status=Outbox.Status.FAILED,
+                last_error=error_msg
+            )
+            return {'status': 'failed', 'outbox_id': outbox_id}
+        
+        # Will retry - Celery handles retry logic
         raise self.retry(exc=exc, countdown=backoff_with_jitter(self.request.retries))
 
 

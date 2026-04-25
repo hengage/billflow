@@ -24,8 +24,9 @@ class Outbox(models.Model):
     
     class Status(models.TextChoices):
         PENDING = 'pending', 'Pending'
-        SENT = 'sent', 'Sent'
-        FAILED = 'failed', 'Failed'
+        DRAINED = 'drained', 'Drained'  # Queued to Celery
+        SENT = 'sent', 'Sent'  # Successfully delivered
+        FAILED = 'failed', 'Failed'  # Max retries exhausted or permanent failure
     
     # Sequential ID for efficient range queries (ORDER BY id)
     id = models.BigAutoField(primary_key=True)

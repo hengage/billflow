@@ -240,11 +240,11 @@ class OutboxDrainer:
                 )
                 failed_enqueued.append((entry.id, str(e)))
         
-        # Mark successful enqueues as sent
+        # Mark successful enqueues as drained (queued to Celery)
         if len(successfully_enqueued) > 0:
             with transaction.atomic():
                 Outbox.objects.filter(id__in=successfully_enqueued).update(
-                    status=Outbox.Status.SENT,
+                    status=Outbox.Status.DRAINED,
                     sent_at=timezone.now()
                 )
         
