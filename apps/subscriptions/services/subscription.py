@@ -9,6 +9,8 @@ from django.db import transaction
 from django.core.cache import cache
 from django.utils import timezone
 
+from notifications.services import NotificationService
+from notifications.constants import NotificationType
 from ..models import Plan, Subscription
 from ..constants import (
     USER_SUBSCRIPTION_CACHE_KEY_PREFIX,
@@ -153,6 +155,18 @@ class SubscriptionService:
                     start_date_utc=today,
                     end_date_utc=end_date,
                     payment=payment,
+                )
+
+                # Enqueue subscription activated notification
+                NotificationService.enqueue_to_outbox(
+                    user=user,
+                    notification_type=NotificationType.SUBSCRIPTION_ACTIVATED,
+                    subject='Subscription Activated',
+                    template_name='subscription_activated',
+                    context={
+                        'user': {'first_name': user.first_name},
+                        'plan_name': plan.name,
+                    }
                 )
 
         cache_key = f'{USER_SUBSCRIPTION_CACHE_KEY_PREFIX}_{user.id}'
@@ -356,6 +370,18 @@ class SubscriptionService:
             subscription.cancelled_at = timezone.now()
             subscription.save(update_fields=['status', 'cancelled_at'])
 
+            # Enqueue subscription cancelled notification
+            NotificationService.enqueue_to_outbox(
+                user=user,
+                notification_type=NotificationType.SUBSCRIPTION_CANCELLED,
+                subject='Subscription Cancelled',
+                template_name='subscription_cancelled',
+                context={
+                    'user': {'first_name': user.first_name},
+                    'plan_name': subscription.plan.name,
+                }
+            )
+
         # Invalidate cache
         cache_key = f'{USER_SUBSCRIPTION_CACHE_KEY_PREFIX}_{user.id}'
         cache.delete(cache_key)
@@ -420,6 +446,20 @@ class SubscriptionService:
                 start_date_utc=today,
                 end_date_utc=end_date,
                 payment=payment,
+            )
+
+            # Enqueue plan switched notification
+            NotificationService.enqueue_to_outbox(
+                user=user,
+                notification_type=NotificationType.PLAN_SWITCHED,
+                subject='Plan Switched Successfully',
+                template_name='plan_switched',
+                context={
+                    'user': {'first_name': user.first_name},
+                    'old_plan_name': existing.plan.name,
+                    'new_plan_name': new_plan.name,
+                    'end_date': end_date.strftime('%B %d, %Y'),
+                }
             )
 
         # Invalidate cache
@@ -487,6 +527,18 @@ class SubscriptionService:
         cache_key = f'{USER_SUBSCRIPTION_CACHE_KEY_PREFIX}_{subscription.user_id}'
         cache.delete(cache_key)
 
+        # Enqueue subscription expired notification
+        NotificationService.enqueue_to_outbox(
+            user=subscription.user,
+            notification_type=NotificationType.SUBSCRIPTION_EXPIRED,
+            subject='Subscription Expired',
+            template_name='subscription_expired',
+            context={
+                'user': {'first_name': subscription.user.first_name},
+                'plan_name': subscription.plan.name,
+            }
+        )
+
         logger.info(
             f'Subscription expired | user={subscription.user_id} | '
             f'subscription={subscription.id}'
@@ -539,6 +591,21 @@ class SubscriptionService:
                 start_date_utc=new_start,
                 end_date_utc=new_end,
                 payment=payment,
+            )
+
+            # Enqueue subscription renewed notification
+            NotificationService.enqueue_to_outbox(
+                user=old_subscription.user,
+                notification_type=NotificationType.SUBSCRIPTION_RENEWED,
+                subject='Subscription Renewed',
+                template_name='subscription_renewed',
+                context={
+                    'user': {'first_name': old_subscription.user.first_name},
+                    'plan_name': plan.name,
+                    'currency': 'NGN',
+                    'amount': str(amount),
+                    'end_date': new_end.strftime('%B %d, %Y'),
+                }
             )
 
         # Invalidate cache

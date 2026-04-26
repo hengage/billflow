@@ -1,0 +1,46 @@
+{% extends "emails/_base.html" %}
+
+{% block title %}Payment Failed{% endblock %}
+
+{% block content %}
+<div class="alert alert-error">
+    <strong>✗ Payment Failed</strong><br>
+    We couldn't process your transaction. Please try again.
+</div>
+
+<p class="greeting">Hi {{ user.first_name|default:"there" }},</p>
+
+<p class="message">
+    We encountered an issue processing your payment. Don't worry — your funds are safe. Here are the details:
+</p>
+
+<div class="details-box">
+    <div class="detail-row">
+        <span class="detail-label">Attempted Amount</span>
+        <span class="detail-value"> {{ currency }} {{ amount }}</span>
+    </div>
+    <div class="detail-row">
+        <span class="detail-label">Reference</span>
+        <span class="detail-value"> {{ reference }}</span>
+    </div>
+    <div class="detail-row">
+        <span class="detail-label">Date</span>
+        <span class="detail-value"> {% now "F j, Y" %}</span>
+    </div>
+    <div class="detail-row">
+        <span class="detail-label">Status</span>
+        <span class="detail-value" style="color: #ef4444;"> ✗ Failed</span>
+    </div>
+</div>
+
+<p class="message">
+    Common reasons for payment failure include insufficient funds, expired card, or bank security checks. You can retry the payment or use a different payment method.
+</p>
+
+<a href="#" class="cta-button" style="background: #ef4444;">Retry Payment</a>
+
+<p class="message" style="margin-top: 30px;">
+    Need help? Contact our support team at <a href="mailto:support@billflow.app">support@billflow.app</a><br>
+    <strong>The BillFlow Team</strong>
+</p>
+{% endblock %}

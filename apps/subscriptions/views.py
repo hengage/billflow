@@ -15,7 +15,6 @@ from .serializers import (
     SwitchPlanSerializer,
 )
 from .services import SubscriptionService
-from notifications.services import NotificationService
 from .api_schema import (
     plan_list_schema,
     subscribe_schema,
@@ -130,13 +129,6 @@ class SubscribeView(APIView):
         try:
             subscription = SubscriptionService.subscribe_via_wallet(user, plan, billing_cycle)
 
-            # Queue notification after successful wallet subscription
-            from django.db import transaction
-            from notifications.services import NotificationService
-            transaction.on_commit(
-                lambda: NotificationService.send_subscription_activated(user, plan)
-            )
-
             return created(
                 data=SubscriptionSerializer(subscription).data,
                 message='Subscription activated successfully.',
@@ -250,10 +242,6 @@ class RenewView(APIView):
                 billing_cycle=billing_cycle,
             )
 
-            transaction.on_commit(
-                lambda: NotificationService.send_subscription_renewed(user, new_subscription, payment)
-            )
-
             return created(
                 data=SubscriptionSerializer(new_subscription).data,
                 message='Subscription renewed successfully.',
@@ -341,6 +329,7 @@ class CancelSubscriptionView(APIView):
     def post(self, request):
         try:
             subscription = SubscriptionService.cancel(request.user)
+
             return success(
                 data=SubscriptionSerializer(subscription).data,
                 message='Subscription cancelled successfully.',
@@ -381,19 +370,20 @@ class SwitchPlanView(APIView):
 
         return self._handle_direct_switch(request, plan, serializer.validated_data)
 
-    def _handle_wallet_switch(self, user, plan, billing_cycle):
+    def _handle_wallet_switch(self, user, new_plan, billing_cycle):
+        # Get current subscription (old plan) before switching
+        from .models import Subscription
+        old_subscription = Subscription.objects.filter(
+            user=user,
+            status=Subscription.Status.ACTIVE
+        ).select_related('plan').first()
+        old_plan = old_subscription.plan if old_subscription else None
+
         try:
             subscription = SubscriptionService.switch_plan_via_wallet(
                 user=user,
-                new_plan=plan,
+                new_plan=new_plan,
                 billing_cycle=billing_cycle,
-            )
-
-            # Queue notification after successful switch
-            from django.db import transaction
-            from notifications.services import NotificationService
-            transaction.on_commit(
-                lambda: NotificationService.send_subscription_activated(user, plan)
             )
 
             return created(

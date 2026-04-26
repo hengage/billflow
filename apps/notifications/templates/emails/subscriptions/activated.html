@@ -1,0 +1,42 @@
+{% extends "emails/_base.html" %}
+
+{% block title %}Subscription Activated{% endblock %}
+
+{% block content %}
+<div class="alert alert-success">
+    <strong>🎉 Welcome Aboard!</strong><br>
+    Your subscription is now active.
+</div>
+
+<p class="greeting">Hi {{ user.first_name|default:"there" }},</p>
+
+<p class="message">
+    Welcome to the {{ plan_name }} plan! Your subscription has been successfully activated and you now have full access to all included features.
+</p>
+
+<div class="details-box">
+    <div class="detail-row">
+        <span class="detail-label">Plan</span>
+        <span class="detail-value"> {{ plan_name }}</span>
+    </div>
+    <div class="detail-row">
+        <span class="detail-label">Status</span>
+        <span class="detail-value" style="color: #10b981;"> Active</span>
+    </div>
+    <div class="detail-row">
+        <span class="detail-label">Start Date</span>
+        <span class="detail-value"> {% now "F j, Y" %}</span>
+    </div>
+</div>
+
+<p class="message">
+    You're all set! Start exploring your new features and make the most of your subscription.
+</p>
+
+<a href="#" class="cta-button">Go to Dashboard</a>
+
+<p class="message" style="margin-top: 30px;">
+    Thanks for subscribing!<br>
+    <strong>The BillFlow Team</strong>
+</p>
+{% endblock %}

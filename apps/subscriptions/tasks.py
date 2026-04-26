@@ -44,7 +44,6 @@ def process_single_expiry(self, subscription_id):
     Uses database-level locking for concurrency safety.
     """
     from .services import SubscriptionService
-    from notifications.services import NotificationService
 
     try:
         with transaction.atomic():
@@ -59,11 +58,6 @@ def process_single_expiry(self, subscription_id):
                 return
 
             SubscriptionService.expire_subscription(subscription)
-
-            transaction.on_commit(lambda: NotificationService.send_subscription_expired(
-                user=subscription.user,
-                plan=subscription.plan
-            ))
 
             logger.info(f"Successfully expired subscription {subscription_id}")
 

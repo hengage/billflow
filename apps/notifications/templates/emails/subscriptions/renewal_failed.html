@@ -1,0 +1,55 @@
+{% extends "emails/_base.html" %}
+
+{% block title %}Renewal Failed{% endblock %}
+
+{% block content %}
+<div class="alert alert-error">
+    <strong>✗ Auto-Renewal Failed</strong><br>
+    Action needed to keep your subscription active.
+</div>
+
+<p class="greeting">Hi {{ user.first_name|default:"there" }},</p>
+
+<p class="message">
+    We were unable to automatically renew your {{ plan_name }} subscription. This usually happens due to an expired card, insufficient funds, or a bank security check.
+</p>
+
+<div class="details-box">
+    <div class="detail-row">
+        <span class="detail-label">Plan</span>
+        <span class="detail-value">{{ plan_name }}</span>
+    </div>
+    <div class="detail-row">
+        <span class="detail-label">Status</span>
+        <span class="detail-value" style="color: #ef4444;">● Renewal Failed</span>
+    </div>
+    {% if final_attempt %}
+    <div class="detail-row">
+        <span class="detail-label">Action Required</span>
+        <span class="detail-value" style="color: #ef4444;">Immediate</span>
+    </div>
+    {% else %}
+    <div class="detail-row">
+        <span class="detail-label">Retry Attempts Left</span>
+        <span class="detail-value">{{ attempts_remaining }}</span>
+    </div>
+    {% endif %}
+</div>
+
+{% if final_attempt %}
+<p class="message">
+    <strong>This was our final retry attempt.</strong> Your subscription will expire soon if payment is not received. Please update your payment method immediately to avoid service interruption.
+</p>
+{% else %}
+<p class="message">
+    Don't worry — we'll try again automatically. To ensure your subscription continues uninterrupted, please update your payment method or ensure sufficient funds are available.
+</p>
+{% endif %}
+
+<a href="#" class="cta-button" style="background: #ef4444;">Update Payment Method</a>
+
+<p class="message" style="margin-top: 30px;">
+    Need help? Contact our support team at <a href="mailto:support@billflow.app">support@billflow.app</a><br>
+    <strong>The BillFlow Team</strong>
+</p>
+{% endblock %}

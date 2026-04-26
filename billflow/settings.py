@@ -16,13 +16,19 @@ from datetime import timedelta
 from celery.schedules import crontab
 from utils.paths import get_project_root, get_apps_dir
 from decouple import config
-from .logging import LOGGING
 
 TASK_SUBSCRIPTION_DISPATCH_EXPIRIES = "subscriptions.dispatch_expiries"
 TASK_SUBSCRIPTION_DISPATCH_AUTO_RENEWALS = "subscriptions.dispatch_auto_renewals"
 TASK_SUBSCRIPTION_ATTEMPT_AUTO_RENEWAL = "subscriptions.attempt_auto_renewal"
 
+# Notification outbox tasks
+TASK_NOTIFICATION_DRAIN_OUTBOX = "notifications.tasks.drain_notification_outbox"
+TASK_NOTIFICATION_SEND_FROM_OUTBOX = "notifications.tasks.send_notification_from_outbox"
+TASK_NOTIFICATION_RECOVER_STALE = "notifications.tasks.recover_stale_notification_entries"
+
 # Celery queues
+TASK_QUEUE_WEBHOOKS = 'webhooks'
+TASK_QUEUE_NOTIFICATIONS = 'notifications'
 TASK_QUEUE_AUTO_RENEWALS = 'subscriptions.auto_renewals'
 
 # Defines the project's root directory and adds the "apps" subdirectory  
@@ -208,10 +214,12 @@ CELERY_RESULT_BACKEND = config("REDIS_URL")
 CELERY_TASK_QUEUES_DEFAULT = 'default'
 
 CELERY_TASK_ROUTES = {
-    'payments.tasks.process_webhook_event': {'queue': 'webhooks'},
-    'payments.tasks.send_payment_success_notification': {'queue': 'notifications'},
-    'payments.tasks.send_payment_failed_notification': {'queue': 'notifications'},
-    'notifications.tasks.send_email_task': {'queue': 'notifications'},
+    'payments.tasks.process_webhook_event': {'queue': TASK_QUEUE_WEBHOOKS},
+    'payments.tasks.send_payment_success_notification': {'queue': TASK_QUEUE_NOTIFICATIONS},
+    'payments.tasks.send_payment_failed_notification': {'queue': TASK_QUEUE_NOTIFICATIONS},
+    TASK_NOTIFICATION_DRAIN_OUTBOX: {'queue': TASK_QUEUE_NOTIFICATIONS},
+    TASK_NOTIFICATION_SEND_FROM_OUTBOX: {'queue': TASK_QUEUE_NOTIFICATIONS},
+    TASK_NOTIFICATION_RECOVER_STALE: {'queue': TASK_QUEUE_NOTIFICATIONS},
     TASK_SUBSCRIPTION_DISPATCH_EXPIRIES: {'queue': 'default'},
     TASK_SUBSCRIPTION_DISPATCH_AUTO_RENEWALS: {'queue': TASK_QUEUE_AUTO_RENEWALS},
     TASK_SUBSCRIPTION_ATTEMPT_AUTO_RENEWAL: {'queue': TASK_QUEUE_AUTO_RENEWALS},
@@ -235,6 +243,14 @@ CELERY_BEAT_SCHEDULE = {
     'dispatch-auto-renewals-every-2-minutes': {
         'task': TASK_SUBSCRIPTION_DISPATCH_AUTO_RENEWALS,
         'schedule': 120.0,  # every 2 minutes (temporary for testing)
+    },
+    'drain-notification-outbox': {
+        'task': TASK_NOTIFICATION_DRAIN_OUTBOX,
+        'schedule': 30.0,  # every 30 seconds
+    },
+    'recover-stale-notification-entries': {
+        'task': TASK_NOTIFICATION_RECOVER_STALE,
+        'schedule': 1800.0,  # every 30 minutes
     },
 }
 
@@ -276,8 +292,6 @@ SOCIALACCOUNT_PROVIDERS = {
 
 PASSWORD_RESET_CONFIRM_URL = config('PASSWORD_RESET_CONFIRM_URL')
 
-EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
-
 # billflow/settings.py
 SPECTACULAR_SETTINGS = {
     'TITLE': 'BillFlow API',
@@ -312,3 +326,10 @@ SPECTACULAR_SETTINGS = {
 PAYSTACK_SECRET_KEY = config('PAYSTACK_SECRET_KEY')
 STRIPE_SECRET_KEY = config('STRIPE_SECRET_KEY')
 STRIPE_WEBHOOK_SECRET = config('STRIPE_WEBHOOK_SECRET', default='')
+
+# Email Provider Configuration
+EMAIL_PROVIDER = config('EMAIL_PROVIDER', default='console')
+DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='BillFlow <noreply@billflow.app>')
+
+# Brevo (Sendinblue) API Key - required when EMAIL_PROVIDER='brevo'
+BREVO_API_KEY = config('BREVO_API_KEY', default='')

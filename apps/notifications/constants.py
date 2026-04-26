@@ -9,7 +9,10 @@ class NotificationType(models.TextChoices):
     SUBSCRIPTION_EXPIRED = 'subscription_expired', 'Subscription Expired'
     SUBSCRIPTION_ACTIVATED = 'subscription_activated', 'Subscription Activated'
     SUBSCRIPTION_RENEWED = 'subscription_renewed', 'Subscription Renewed'
+    SUBSCRIPTION_CANCELLED = 'subscription_cancelled', 'Subscription Cancelled'
     RENEWAL_FAILED = 'renewal_failed', 'Renewal Failed'
+    PLAN_SWITCHED = 'plan_switched', 'Plan Switched'
+    WELCOME = 'welcome', 'Welcome'
 
 
 class NotificationChannel(models.TextChoices):
@@ -33,7 +36,10 @@ NOTIFICATION_TYPE_GROUP_MAP = {
     NotificationType.SUBSCRIPTION_EXPIRED: NotificationGroup.SUBSCRIPTIONS,
     NotificationType.SUBSCRIPTION_ACTIVATED: NotificationGroup.SUBSCRIPTIONS,
     NotificationType.SUBSCRIPTION_RENEWED: NotificationGroup.SUBSCRIPTIONS,
+    NotificationType.SUBSCRIPTION_CANCELLED: NotificationGroup.SUBSCRIPTIONS,
     NotificationType.RENEWAL_FAILED: NotificationGroup.SUBSCRIPTIONS,
+    NotificationType.PLAN_SWITCHED: NotificationGroup.SUBSCRIPTIONS,
+    NotificationType.WELCOME: NotificationGroup.SUBSCRIPTIONS,
 }
 
 # Descriptions are static metadata — they describe what each group covers.

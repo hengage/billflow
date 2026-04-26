@@ -1,0 +1,42 @@
+{% extends "emails/_base.html" %}
+
+{% block title %}Subscription Cancelled{% endblock %}
+
+{% block content %}
+<div class="alert">
+    <strong>Subscription Cancelled</strong><br>
+    Your plan has been cancelled as requested.
+</div>
+
+<p class="greeting">Hi {{ user.first_name|default:"there" }},</p>
+
+<p class="message">
+    We're confirming that your {{ plan_name }} subscription has been successfully cancelled as requested.
+</p>
+
+<div class="details-box">
+    <div class="detail-row">
+        <span class="detail-label">Cancelled Plan</span>
+        <span class="detail-value"> {{ plan_name }}</span>
+    </div>
+    <div class="detail-row">
+        <span class="detail-label">Status</span>
+        <span class="detail-value"> Cancelled</span>
+    </div>
+</div>
+
+<p class="message">
+    You'll continue to have access to your subscription benefits until the end of your current billing period. After that, your account will revert to the free plan.
+</p>
+
+<p class="message">
+    We're sorry to see you go! If you change your mind, you can resubscribe anytime from your account settings.
+</p>
+
+<a href="#" class="cta-button" style="background: #6b7280;">Resubscribe</a>
+
+<p class="message" style="margin-top: 30px;">
+    Thank you for using BillFlow!<br>
+    <strong>The BillFlow Team</strong>
+</p>
+{% endblock %}

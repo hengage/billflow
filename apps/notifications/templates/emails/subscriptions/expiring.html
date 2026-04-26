@@ -1,0 +1,42 @@
+{% extends "emails/_base.html" %}
+
+{% block title %}Subscription Expiring Soon{% endblock %}
+
+{% block content %}
+<div class="alert alert-warning">
+    <strong>⏰ Heads Up!</strong><br>
+    Your subscription expires soon.
+</div>
+
+<p class="greeting">Hi {{ user.first_name|default:"there" }},</p>
+
+<p class="message">
+    This is a friendly reminder that your {{ plan_name }} subscription will expire on <strong>{{ end_date }}</strong>.
+</p>
+
+<div class="details-box">
+    <div class="detail-row">
+        <span class="detail-label">Plan</span>
+        <span class="detail-value">{{ plan_name }}</span>
+    </div>
+    <div class="detail-row">
+        <span class="detail-label">Expiry Date</span>
+        <span class="detail-value">{{ end_date }}</span>
+    </div>
+    <div class="detail-row">
+        <span class="detail-label">Status</span>
+        <span class="detail-value" style="color: #f59e0b;">● Expiring Soon</span>
+    </div>
+</div>
+
+<p class="message">
+    To avoid any interruption to your service, please renew your subscription before the expiry date. If you have auto-renewal enabled, we'll attempt to renew automatically.
+</p>
+
+<a href="#" class="cta-button" style="background: #f59e0b;">Renew Now</a>
+
+<p class="message" style="margin-top: 30px;">
+    Questions? We're here to help at <a href="mailto:support@billflow.app">support@billflow.app</a><br>
+    <strong>The BillFlow Team</strong>
+</p>
+{% endblock %}

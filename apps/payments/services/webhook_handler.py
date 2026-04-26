@@ -1,6 +1,8 @@
 import logging
 from django.db import transaction
 
+from notifications.services import NotificationService
+from notifications.constants import NotificationType
 from payments.constants import (
     Currency,
     PaymentProvider,
@@ -247,15 +249,9 @@ class WebhookHandler:
             webhook_log.processed = True
             webhook_log.save(update_fields=['processed'])
 
-        # Queue notification after the transaction commits —
-        from payments.tasks import send_payment_success_notification
-        user = payment.user
-        transaction.on_commit(
-            lambda: send_payment_success_notification.delay(
-                user_id=str(user.id),
-                payment_id=str(payment.id),
-            )
-        )
+            # Note: Payment success notifications are handled by downstream
+            # domain services (WalletService, SubscriptionService) to send
+            # purpose-specific emails (wallet_topup, subscription_activated, etc.)
 
     @classmethod
     def _handle_failure(cls, reference, webhook_log, failure_reason=None):
@@ -289,14 +285,19 @@ class WebhookHandler:
             webhook_log.processed = True
             webhook_log.save(update_fields=['processed'])
 
-        from payments.tasks import send_payment_failed_notification
-        user = payment.user
-        transaction.on_commit(
-            lambda: send_payment_failed_notification.delay(
-                user_id=str(user.id),
-                payment_id=str(payment.id),
+            # Enqueue payment failure notification to outbox (atomic with payment update)
+            NotificationService.enqueue_to_outbox(
+                user=payment.user,
+                notification_type=NotificationType.PAYMENT_FAILED,
+                subject='Payment Failed',
+                template_name='payment_failed',
+                context={
+                    'user': {'first_name': payment.user.first_name},
+                    'amount': str(payment.amount),
+                    'currency': payment.currency,
+                    'reference': payment.reference,
+                }
             )
-        )
 
     @staticmethod
     def _store_payment_method_if_applicable(payment, raw_data, provider):
@@ -425,16 +426,6 @@ class WebhookHandler:
             payment=payment,
         )
 
-        # Notify user of successful renewal
-        from notifications.services import NotificationService
-        transaction.on_commit(
-            lambda: NotificationService.send_subscription_renewed(
-                user=payment.user,
-                subscription=new_subscription,
-                payment=payment,
-            )
-        )
-
         logger.info(
             f'Subscription renewed via webhook | '
             f'payment={payment.id} | old_sub={old_subscription.id} | '
@@ -474,15 +465,6 @@ class WebhookHandler:
             new_plan=plan,
             billing_cycle=billing_cycle,
             payment=payment,
-        )
-
-        # Notify user of successful plan switch
-        from notifications.services import NotificationService
-        transaction.on_commit(
-            lambda: NotificationService.send_subscription_activated(
-                user=payment.user,
-                plan=plan,
-            )
         )
 
         logger.info(

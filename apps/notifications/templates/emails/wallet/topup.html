@@ -1,0 +1,45 @@
+{% extends "emails/_base.html" %}
+
+{% block title %}Wallet Top-Up Confirmed{% endblock %}
+
+{% block content %}
+<div class="alert alert-success">
+    <strong>💰 Wallet Credited</strong><br>
+    Your top-up was successful.
+</div>
+
+<p class="greeting">Hi {{ user.first_name|default:"there" }},</p>
+
+<p class="message">
+    Great news! Your BillFlow wallet has been successfully credited. The funds are available for immediate use.
+</p>
+
+<table class="details-box" width="100%" cellpadding="0" cellspacing="0" border="0">
+    <tr>
+        <td class="detail-label" style="padding: 12px 0; border-bottom: 1px solid #e4e4e7;">Amount Added</td>
+        <td class="detail-value"
+            style="color: #10b981; text-align: right; padding: 12px 0; border-bottom: 1px solid #e4e4e7;">₦{{ amount }}
+        </td>
+    </tr>
+    <tr>
+        <td class="detail-label" style="padding: 12px 0; border-bottom: 1px solid #e4e4e7;">Date</td>
+        <td class="detail-value" style="text-align: right; padding: 12px 0; border-bottom: 1px solid #e4e4e7;">
+            {{ date }}</td>
+    </tr>
+    <tr>
+        <td class="detail-label" style="padding: 12px 0;">Status</td>
+        <td class="detail-value" style="color: #10b981; text-align: right; padding: 12px 0;"> Confirmed</td>
+    </tr>
+</table>
+
+<p class="message">
+    Your wallet balance is now ready to use for bill payments, subscriptions, and more.
+</p>
+
+<a href="#" class="cta-button">View Wallet</a>
+
+<p class="message" style="margin-top: 30px;">
+    Thank you for using BillFlow!<br>
+    <strong>The BillFlow Team</strong>
+</p>
+{% endblock %}

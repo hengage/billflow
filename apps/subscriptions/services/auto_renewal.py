@@ -429,10 +429,18 @@ class AutoRenewalProcessor:
 
             # Notify user of failed renewal
             attempts_remaining = MAX_RENEWAL_ATTEMPTS - self.subscription.renewal_attempts
-            NotificationService.send_renewal_failed(
+            from notifications.constants import NotificationType
+            NotificationService.enqueue_to_outbox(
                 user=self.subscription.user,
-                subscription=self.subscription,
-                attempts_remaining=attempts_remaining,
+                notification_type=NotificationType.RENEWAL_FAILED,
+                subject='Renewal Failed',
+                template_name='renewal_failed',
+                context={
+                    'user': {'first_name': self.subscription.user.first_name},
+                    'plan_name': self.subscription.plan.name,
+                    'attempts_remaining': str(attempts_remaining),
+                    'final_attempt': attempts_remaining == 0,
+                }
             )
             logger.warning(
                 f"Auto-renewal declined: {self.subscription_id}, "
@@ -475,7 +483,6 @@ class AutoRenewalProcessor:
         the renewal that the webhook failed to do.
         """
         from subscriptions.services import SubscriptionService
-        from notifications.services import NotificationService
 
         payment = Payment.objects.filter(
             purpose=PaymentPurpose.RENEW_SUBSCRIPTION,
@@ -504,14 +511,6 @@ class AutoRenewalProcessor:
                         'payment_id': str(payment.id),
                         'new_subscription_id': str(new_subscription.id),
                     }
-                )
-
-                transaction.on_commit(
-                    lambda: NotificationService.send_subscription_renewed(
-                        user=self.subscription.user,
-                        subscription=new_subscription,
-                        payment=payment,
-                    )
                 )
 
             logger.info(
