@@ -165,11 +165,7 @@ class SubscriptionService:
                     template_name='subscription_activated',
                     context={
                         'user': {'first_name': user.first_name},
-                        'subscription': {
-                            'plan_name': plan.name,
-                            'billing_cycle': billing_cycle,
-                            'end_date': end_date.isoformat(),
-                        },
+                        'plan_name': plan.name,
                     }
                 )
 
@@ -382,10 +378,7 @@ class SubscriptionService:
                 template_name='subscription_cancelled',
                 context={
                     'user': {'first_name': user.first_name},
-                    'subscription': {
-                        'plan_name': subscription.plan.name,
-                        'end_date': subscription.end_date_utc.isoformat(),
-                    },
+                    'plan_name': subscription.plan.name,
                 }
             )
 
@@ -463,15 +456,9 @@ class SubscriptionService:
                 template_name='plan_switched',
                 context={
                     'user': {'first_name': user.first_name},
-                    'subscription': {
-                        'plan_name': new_plan.name,
-                        'billing_cycle': billing_cycle,
-                        'end_date': end_date.isoformat(),
-                    },
-                    'payment': {
-                        'amount': str(amount),
-                        'currency': 'NGN',
-                    },
+                    'old_plan_name': existing.plan.name,
+                    'new_plan_name': new_plan.name,
+                    'end_date': end_date.strftime('%B %d, %Y'),
                 }
             )
 
@@ -602,15 +589,10 @@ class SubscriptionService:
                 template_name='subscription_renewed',
                 context={
                     'user': {'first_name': old_subscription.user.first_name},
-                    'subscription': {
-                        'plan_name': plan.name,
-                        'billing_cycle': billing_cycle,
-                        'end_date': new_end.isoformat(),
-                    },
-                    'payment': {
-                        'amount': str(amount),
-                        'currency': 'NGN',
-                    },
+                    'plan_name': plan.name,
+                    'currency': 'NGN',
+                    'amount': str(amount),
+                    'end_date': new_end.strftime('%B %d, %Y'),
                 }
             )
 

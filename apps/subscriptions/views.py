@@ -15,7 +15,6 @@ from .serializers import (
     SwitchPlanSerializer,
 )
 from .services import SubscriptionService
-from notifications.services import NotificationService
 from .api_schema import (
     plan_list_schema,
     subscribe_schema,
@@ -130,13 +129,6 @@ class SubscribeView(APIView):
         try:
             subscription = SubscriptionService.subscribe_via_wallet(user, plan, billing_cycle)
 
-            # Queue notification after successful wallet subscription
-            from django.db import transaction
-            from notifications.services import NotificationService
-            transaction.on_commit(
-                lambda: NotificationService.send_subscription_activated(user, plan)
-            )
-
             return created(
                 data=SubscriptionSerializer(subscription).data,
                 message='Subscription activated successfully.',
@@ -250,10 +242,6 @@ class RenewView(APIView):
                 billing_cycle=billing_cycle,
             )
 
-            transaction.on_commit(
-                lambda: NotificationService.send_subscription_renewed(user, new_subscription, payment)
-            )
-
             return created(
                 data=SubscriptionSerializer(new_subscription).data,
                 message='Subscription renewed successfully.',
@@ -342,16 +330,6 @@ class CancelSubscriptionView(APIView):
         try:
             subscription = SubscriptionService.cancel(request.user)
 
-            # Notify user of cancellation
-            from django.db import transaction
-            from notifications.services import NotificationService
-            transaction.on_commit(
-                lambda: NotificationService.send_subscription_cancelled(
-                    user=request.user,
-                    plan=subscription.plan
-                )
-            )
-
             return success(
                 data=SubscriptionSerializer(subscription).data,
                 message='Subscription cancelled successfully.',
@@ -407,19 +385,6 @@ class SwitchPlanView(APIView):
                 new_plan=new_plan,
                 billing_cycle=billing_cycle,
             )
-
-            # Notify user of plan switch
-            from django.db import transaction
-            from notifications.services import NotificationService
-            if old_plan:
-                transaction.on_commit(
-                    lambda: NotificationService.send_plan_switched(
-                        user=user,
-                        old_plan=old_plan,
-                        new_plan=new_plan,
-                        subscription=subscription
-                    )
-                )
 
             return created(
                 data=SubscriptionSerializer(subscription).data,
