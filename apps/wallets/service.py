@@ -1,4 +1,6 @@
 from django.db import transaction
+from notifications.services import NotificationService
+from notifications.constants import NotificationType
 from .models import Wallet, WalletTransaction
 
 
@@ -82,6 +84,20 @@ class WalletService:
                 amount=amount,
                 type=WalletTransaction.TransactionType.TOPUP,
                 reference=reference,
+            )
+
+            # Enqueue wallet topup notification
+            NotificationService.enqueue_to_outbox(
+                user=user,
+                notification_type=NotificationType.WALLET_TOPUP,
+                subject='Wallet Top-Up Successful',
+                template_name='wallet_topup',
+                context={
+                    'user': {'first_name': user.first_name},
+                    'amount': str(amount),
+                    'currency': 'NGN',
+                    'reference': reference,
+                }
             )
 
         return tx
