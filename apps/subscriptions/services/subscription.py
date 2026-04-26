@@ -527,6 +527,18 @@ class SubscriptionService:
         cache_key = f'{USER_SUBSCRIPTION_CACHE_KEY_PREFIX}_{subscription.user_id}'
         cache.delete(cache_key)
 
+        # Enqueue subscription expired notification
+        NotificationService.enqueue_to_outbox(
+            user=subscription.user,
+            notification_type=NotificationType.SUBSCRIPTION_EXPIRED,
+            subject='Subscription Expired',
+            template_name='subscription_expired',
+            context={
+                'user': {'first_name': subscription.user.first_name},
+                'plan_name': subscription.plan.name,
+            }
+        )
+
         logger.info(
             f'Subscription expired | user={subscription.user_id} | '
             f'subscription={subscription.id}'
