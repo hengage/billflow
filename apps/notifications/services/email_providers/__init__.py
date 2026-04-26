@@ -16,15 +16,28 @@ def get_email_provider():
     
     Returns:
         EmailProvider instance
+    
+    Raises:
+        ValueError: If EMAIL_PROVIDER is unknown and DEBUG=False
     """
     from django.conf import settings
-    
+
     provider_name = getattr(settings, 'EMAIL_PROVIDER', 'console')
-    
+
     providers = {
         'console': ConsoleProvider,
         'brevo': BrevoProvider,
     }
-    
-    provider_class = providers.get(provider_name, ConsoleProvider)
+
+    provider_class = providers.get(provider_name)
+
+    if not provider_class:
+        if settings.DEBUG:
+            provider_class = ConsoleProvider
+        else:
+            raise ValueError(
+                f"Unknown EMAIL_PROVIDER: '{provider_name}'. "
+                f"Valid options: {list(providers.keys())}"
+            )
+
     return provider_class()
