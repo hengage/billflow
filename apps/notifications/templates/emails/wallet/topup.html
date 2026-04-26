@@ -14,20 +14,23 @@
     Great news! Your BillFlow wallet has been successfully credited. The funds are available for immediate use.
 </p>
 
-<div class="details-box">
-    <div class="detail-row">
-        <span class="detail-label">Amount Added</span>
-        <span class="detail-value" style="color: #10b981;">+ ₦{{ amount }}</span>
-    </div>
-    <div class="detail-row">
-        <span class="detail-label">Date</span>
-        <span class="detail-value">{% now "F j, Y" %}</span>
-    </div>
-    <div class="detail-row">
-        <span class="detail-label">Status</span>
-        <span class="detail-value" style="color: #10b981;">● Confirmed</span>
-    </div>
-</div>
+<table class="details-box" width="100%" cellpadding="0" cellspacing="0" border="0">
+    <tr>
+        <td class="detail-label" style="padding: 12px 0; border-bottom: 1px solid #e4e4e7;">Amount Added</td>
+        <td class="detail-value"
+            style="color: #10b981; text-align: right; padding: 12px 0; border-bottom: 1px solid #e4e4e7;">₦{{ amount }}
+        </td>
+    </tr>
+    <tr>
+        <td class="detail-label" style="padding: 12px 0; border-bottom: 1px solid #e4e4e7;">Date</td>
+        <td class="detail-value" style="text-align: right; padding: 12px 0; border-bottom: 1px solid #e4e4e7;">
+            {{ date }}</td>
+    </tr>
+    <tr>
+        <td class="detail-label" style="padding: 12px 0;">Status</td>
+        <td class="detail-value" style="color: #10b981; text-align: right; padding: 12px 0;"> Confirmed</td>
+    </tr>
+</table>
 
 <p class="message">
     Your wallet balance is now ready to use for bill payments, subscriptions, and more.

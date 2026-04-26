@@ -65,6 +65,8 @@
         .detail-row {
             display: flex;
             justify-content: space-between;
+            align-items: center;
+            width: 100%;
             padding: 12px 0;
             border-bottom: 1px solid #e4e4e7;
         }
@@ -75,25 +77,33 @@
             font-size: 14px;
             color: #71717a;
             font-weight: 500;
+            flex: 0 0 auto;
         }
         .detail-value {
             font-size: 14px;
             color: #18181b;
             font-weight: 600;
+            flex: 0 0 auto;
+            text-align: right;
         }
         .cta-button {
             display: inline-block;
             background: #4f46e5;
-            color: #ffffff;
+            color: #ffffff !important;
             text-decoration: none;
             padding: 14px 32px;
             border-radius: 8px;
             font-size: 16px;
             font-weight: 600;
             margin: 24px 0;
+            -webkit-text-fill-color: #ffffff;
         }
         .cta-button:hover {
             background: #4338ca;
+        }
+        a.cta-button {
+            color: #ffffff !important;
+            -webkit-text-fill-color: #ffffff;
         }
         .alert {
             background: #fef3c7;

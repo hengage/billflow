@@ -1,4 +1,6 @@
 from django.db import transaction
+from django.utils import timezone
+from zoneinfo import ZoneInfo
 from notifications.services import NotificationService
 from notifications.constants import NotificationType
 from .models import Wallet, WalletTransaction
@@ -86,7 +88,9 @@ class WalletService:
                 reference=reference,
             )
 
-            # Enqueue wallet topup notification
+            # Enqueue wallet topup notification (using WAT timezone)
+            wat_tz = ZoneInfo('Africa/Lagos')
+            tx_wat = tx.created_at.astimezone(wat_tz)
             NotificationService.enqueue_to_outbox(
                 user=user,
                 notification_type=NotificationType.WALLET_TOPUP,
@@ -97,6 +101,7 @@ class WalletService:
                     'amount': str(amount),
                     'currency': 'NGN',
                     'reference': reference,
+                    'date': tx_wat.strftime('%B %d, %Y at %I:%M %p'),
                 }
             )
 
