@@ -249,22 +249,9 @@ class WebhookHandler:
             webhook_log.processed = True
             webhook_log.save(update_fields=['processed'])
 
-            # Enqueue payment success notification to outbox (atomic with payment update)
-            if payment.purpose != PaymentPurpose.WALLET_TOPUP:
-                NotificationService.enqueue_to_outbox(
-                    user=payment.user,
-                    notification_type=NotificationType.PAYMENT_SUCCESS,
-                    subject='Payment Successful',
-                    template_name='payment_success',
-                    context={
-                        'user': {'first_name': payment.user.first_name},
-                        'payment': {
-                            'reference': payment.reference,
-                            'amount': str(payment.amount),
-                            'currency': payment.currency,
-                        },
-                    }
-                )
+            # Note: Payment success notifications are handled by downstream
+            # domain services (WalletService, SubscriptionService) to send
+            # purpose-specific emails (wallet_topup, subscription_activated, etc.)
 
     @classmethod
     def _handle_failure(cls, reference, webhook_log, failure_reason=None):
@@ -306,11 +293,9 @@ class WebhookHandler:
                 template_name='payment_failed',
                 context={
                     'user': {'first_name': payment.user.first_name},
-                    'payment': {
-                        'reference': payment.reference,
-                        'amount': str(payment.amount),
-                        'currency': payment.currency,
-                    },
+                    'amount': str(payment.amount),
+                    'currency': payment.currency,
+                    'reference': payment.reference,
                 }
             )
 
