@@ -8,7 +8,7 @@ Key principles:
 - Jobs are written to outbox in same transaction as business logic
 - Single enqueuer process polls and fans out to workers
 - Domain-specific drainers for different batch sizes/rates
-- Celery handles retries, outbox just tracks pending/sent status
+- Celery handles retries, outbox tracks pending/drained/failed status
 """
 import uuid
 from django.db import models
@@ -19,7 +19,7 @@ class Outbox(models.Model):
     Staged jobs for async processing.
     
     Each domain has its own drainer task that polls this table,
-    enqueues to Celery, then marks as sent.
+    enqueues to Celery, then marks as drained.
     """
     
     class Status(models.TextChoices):
@@ -52,6 +52,7 @@ class Outbox(models.Model):
     
     # Timestamps
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    updated_at = models.DateTimeField(auto_now=True)
     sent_at = models.DateTimeField(null=True, blank=True)
     
     # Error tracking (for audit, not for retry logic)
@@ -61,6 +62,7 @@ class Outbox(models.Model):
         indexes = [
             models.Index(fields=['domain', 'status', 'id']),
             models.Index(fields=['status', 'created_at']),
+            models.Index(fields=['status', 'updated_at']),
         ]
         ordering = ['id']
         verbose_name = 'Outbox Entry'
