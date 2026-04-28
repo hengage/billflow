@@ -420,6 +420,9 @@ class SubscriptionService:
             if not existing:
                 raise ValueError('No active subscription to switch from.')
 
+            if str(existing.plan_id) == str(new_plan.id):
+                raise ValueError('Cannot switch to the same plan. Use renewal instead.')
+
             # Cancel existing immediately
             existing.status = Subscription.Status.CANCELLED
             existing.cancelled_at = timezone.now()
