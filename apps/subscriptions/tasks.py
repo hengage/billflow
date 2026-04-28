@@ -15,26 +15,32 @@ logger = logging.getLogger(__name__)
 
 
 @shared_task(name=settings.TASK_SUBSCRIPTION_DISPATCH_EXPIRIES)
-def dispatch_subscription_expiries():
+def dispatch_subscription_expiries(batch_size=500):
     """
-    Finds ACTIVE subscriptions past their end_date and fans them out to workers.
+    Finds ACTIVE subscriptions past their end_date_utc and fans them out to workers.
+
+    Capped at batch_size per run to prevent unbounded queue spikes.
+    Remaining subscriptions are picked up on the next scheduled run.
     """
     now = timezone.now()
 
     # Only select the ID to keep the initial query extremely light
-    expired_ids = Subscription.objects.filter(
+    expired_ids = list(Subscription.objects.filter(
         status=Subscription.Status.ACTIVE,
-        end_date__lte=now
-    ).values_list('id', flat=True).iterator()
+        end_date_utc__lte=now
+    ).order_by('end_date_utc').values_list('id', flat=True)[:batch_size])
 
-    count = 0
+    count = len(expired_ids)
+    if count == 0:
+        return
+
     for sub_id in expired_ids:
         # Fan-out: each expiry gets its own task in the queue
         process_single_expiry.delay(str(sub_id))
-        count += 1
 
-    if count > 0:
-        logger.info(f"Dispatched {count} subscriptions for expiry.")
+    logger.info(f"Dispatched {count} subscriptions for expiry.")
+    if count == batch_size:
+        logger.info("Batch limit reached — remaining subscriptions will be processed on next run.")
 
 
 @shared_task(bind=True, max_retries=MAX_RETRIES)

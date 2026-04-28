@@ -143,7 +143,7 @@ class OutboxDrainer:
         Pattern from Brandur's job-drain:
         1. SELECT pending rows with FOR UPDATE (prevent other drainers)
         2. Enqueue to Celery
-        3. Mark as 'sent' on successful enqueue
+        3. Mark as 'drained' on successful enqueue
         
         Returns:
             dict: {processed: int, empty: bool}
@@ -177,7 +177,16 @@ class OutboxDrainer:
             # Process batch
             processed = self._process_batch(batch)
             total_processed += processed
-            
+
+            # Break if full batch has zero successful enqueues to avoid tight retry loop
+            # (e.g., during broker outage where all entries stay pending)
+            if len(batch) == self.batch_size and processed == 0:
+                logger.warning(
+                    f'[{self.domain}] Full batch with zero successful enqueues. '
+                    f'Breaking to avoid tight retry loop.'
+                )
+                break
+
             # Continue until we get a partial batch (end of queue)
             if len(batch) < self.batch_size:
                 break
@@ -242,10 +251,11 @@ class OutboxDrainer:
         
         # Mark successful enqueues as drained (queued to Celery)
         if len(successfully_enqueued) > 0:
+            drained_at = timezone.now()
             with transaction.atomic():
                 Outbox.objects.filter(id__in=successfully_enqueued).update(
                     status=Outbox.Status.DRAINED,
-                    sent_at=timezone.now()
+                    last_drained_at=drained_at
                 )
         
         # Mark failed enqueues with error (stay pending for next poll)
@@ -266,15 +276,11 @@ class OutboxDrainer:
 
 def recover_stale_entries(domain: str, stale_threshold_minutes: int = 30) -> dict:
     """
-    Recovery function: detect and reset entries stuck for too long.
+    Recovery function: detect and reset DRAINED entries stuck for too long.
     
-    In normal operation, entries transition PENDING -> SENT quickly.
-    If the drainer or worker crashes, entries might stay in PENDING
-    state indefinitely. This function detects stale entries and 
-    logs them for investigation.
-    
-    Note: Entries stay PENDING so they get reprocessed. The outbox
-    is the source of truth - we don't force-reset, just alert.
+    DRAINED entries were enqueued to Celery but the worker may have
+    crashed or lost the task. If they remain DRAINED beyond the
+    threshold, we reset them to PENDING so the drainer re-enqueues them.
     
     Args:
         domain: Domain to check (e.g., 'notifications')
@@ -287,19 +293,24 @@ def recover_stale_entries(domain: str, stale_threshold_minutes: int = 30) -> dic
     
     stale_entries = Outbox.objects.filter(
         domain=domain,
-        status=Outbox.Status.PENDING,
-        created_at__lt=stale_threshold
-    ).order_by('created_at')
+        status=Outbox.Status.DRAINED,
+        last_drained_at__lt=stale_threshold
+    ).order_by('last_drained_at')
     
     count = stale_entries.count()
     oldest = stale_entries.first()
     
     if count > 0 and oldest:
-        oldest_age = (timezone.now() - oldest.created_at).total_seconds() / 60
+        oldest_age = (timezone.now() - oldest.last_drained_at).total_seconds() / 60
         logger.warning(
-            f'[{domain}] Found {count} stale pending entries | '
+            f'[{domain}] Found {count} stale drained entries | '
             f'oldest={oldest_age:.1f}min ago | '
             f'ids={list(stale_entries.values_list("id", flat=True)[:10])}'
+        )
+        # Reset to PENDING so the drainer picks them up again
+        stale_entries.update(
+            status=Outbox.Status.PENDING,
+            updated_at=timezone.now()
         )
         return {'stale_count': count, 'oldest_stale_minutes': oldest_age}
     

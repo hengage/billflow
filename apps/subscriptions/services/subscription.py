@@ -516,6 +516,34 @@ class SubscriptionService:
         return (True, None)
 
     @staticmethod
+    def can_switch_plan(user, new_plan_id):
+        """
+        Pre-validates if user can switch to a different plan.
+        Called before initiating payment to fail fast if switch not allowed.
+
+        Args:
+            user: User instance
+            new_plan_id: UUID of the Plan to switch to
+
+        Returns:
+            tuple: (can_switch: bool, error_message: str or None)
+        """
+        existing = Subscription.objects.only(
+            'plan_id'
+        ).filter(
+            user=user,
+            status=Subscription.Status.ACTIVE,
+        ).first()
+
+        if not existing:
+            return (False, 'No active subscription to switch from.')
+
+        if str(existing.plan_id) == str(new_plan_id):
+            return (False, 'Cannot switch to the same plan. Use renewal instead.')
+
+        return (True, None)
+
+    @staticmethod
     def expire_subscription(subscription):
         """
         Marks a subscription as expired.

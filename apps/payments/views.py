@@ -17,6 +17,7 @@ from payments.serializers import (
     PaymentHistorySerializer,
 )
 from payments.services.processor import PaymentProcessor
+from payments.utils import execute_payment_processor
 from payments.services.providers.paystack import PaystackProvider
 from payments.services.providers.stripe import StripeProvider
 from payments.decorators import payment_capacity_limiter
@@ -28,7 +29,7 @@ from payments.api_schema import (
     paystack_webhook_schema,
     stripe_webhook_schema,
 )
-from utils.messages import PAYMENT_MESSAGES
+from utils.messages import SYSTEM_MESSAGES
 
 logger = logging.getLogger(__name__)
 
@@ -75,38 +76,10 @@ class InitiatePaymentView(APIView):
             request_params=request_params,
         )
 
-        try:
-            response_body, response_code = processor.execute()
-            if response_code != status.HTTP_200_OK:
-                return fail(
-                    message=PAYMENT_MESSAGES['FAILED'],
-                    error=response_body,
-                    status_code=response_code,
-                )
-            return success(
-                data=response_body,
-                message='Payment initiated successfully.',
-            )
-
-        except ConflictError as exc:
-            return fail(
-                message=str(exc),
-                status_code=status.HTTP_409_CONFLICT,
-            )
-
-        except ValidationError as exc:
-            return fail(
-                message=str(exc),
-                error={'detail': str(exc)},
-                status_code=status.HTTP_400_BAD_REQUEST,
-            )
-
-        except Exception as exc:
-            logger.exception('Payment initiation failed')
-            return fail(
-                message='Payment service temporarily unavailable.',
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            )
+        return execute_payment_processor(
+            processor,
+            'Payment initiated successfully.',
+        )
 
 
 @paystack_webhook_schema
@@ -210,9 +183,10 @@ class PaystackVerifyView(APIView):
         try:
             result = PaystackProvider.verify_transaction(reference)
             return success(data=result, message='Transaction verified.')
-        except Exception as exc:
+        except Exception:
+            logger.exception('Paystack transaction verification failed')
             return fail(
-                message=str(exc),
+                message=SYSTEM_MESSAGES['SERVER_ERROR'],
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
 
@@ -229,6 +203,13 @@ class PaymentHistoryView(APIView):
     permission_classes = (IsAuthenticated,)
 
     def get(self, request):
-        payments = Payment.objects.filter(user=request.user)
-        serializer = PaymentHistorySerializer(payments, many=True)
-        return success(data=serializer.data, message='Payment history retrieved.')
+        try:
+            payments = Payment.objects.filter(user=request.user)
+            serializer = PaymentHistorySerializer(payments, many=True)
+            return success(data=serializer.data, message='Payment history retrieved.')
+        except Exception:
+            logger.exception('Payment history retrieval failed')
+            return fail(
+                message=SYSTEM_MESSAGES['SERVER_ERROR'],
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )

@@ -3,8 +3,8 @@ from django.dispatch import receiver
 from django.core.cache import cache
 from .models import Plan, Subscription
 from .constants import (
-    PLANS_LIST_CACHE_KEY,
     USER_SUBSCRIPTION_CACHE_KEY_PREFIX,
+    invalidate_plans_list_cache,
 )
 
 
@@ -16,7 +16,7 @@ def invalidate_plans_cache(sender, **kwargs):
     updated, or deleted. This ensures customers always see the
     current plan list without waiting for the TTL to expire.
     """
-    cache.delete(PLANS_LIST_CACHE_KEY)
+    invalidate_plans_list_cache(cache)
 
 
 @receiver(post_save, sender=Subscription)

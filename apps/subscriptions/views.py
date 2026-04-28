@@ -6,6 +6,8 @@ from django.core.cache import cache
 
 from api_response.helpers import success, fail, created
 from payments.constants import Currency, PaymentPurpose, PaymentProvider
+from payments.services.processor import PaymentProcessor
+from payments.utils import execute_payment_processor
 from .models import Plan, Subscription
 from .serializers import (
     PlanSerializer,
@@ -24,9 +26,9 @@ from .api_schema import (
     switch_plan_schema,
 )
 from .constants import (
-    PLANS_LIST_CACHE_KEY,
     PLANS_LIST_CACHE_TTL,
     PaymentMethod,
+    get_plans_list_cache_key,
 )
 
 logger = logging.getLogger(__name__)
@@ -46,7 +48,7 @@ class PlanListView(APIView):
         currency = request.query_params.get('currency', Currency.NGN).upper()
 
         # Cache key includes currency so NGN and USD lists are cached separately
-        cache_key = f'{PLANS_LIST_CACHE_KEY}_{currency}'
+        cache_key = get_plans_list_cache_key(currency)
         cached = cache.get(cache_key)
 
         if cached:
@@ -138,6 +140,12 @@ class SubscribeView(APIView):
                 message=str(exc),
                 status_code=status.HTTP_400_BAD_REQUEST,
             )
+        except Exception:
+            logger.exception('Wallet payment failed')
+            return fail(
+                message='Payment service temporarily unavailable.',
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
 
     def _handle_direct_payment(self, request, plan, validated_data):
         """
@@ -151,9 +159,6 @@ class SubscribeView(APIView):
                 message='X-Idempotency-Key header is required for direct payments.',
                 status_code=status.HTTP_400_BAD_REQUEST,
             )
-
-        from payments.services.processor import PaymentProcessor, ConflictError
-        from payments.constants import PaymentPurpose
 
         billing_cycle = validated_data['billing_cycle']
         amount = plan.monthly_price_ngn if billing_cycle == Subscription.BillingCycle.MONTHLY else plan.yearly_price_ngn
@@ -172,14 +177,10 @@ class SubscribeView(APIView):
             request_params=request_params,
         )
 
-        try:
-            response_body, response_code = processor.execute()
-            return success(
-                data=response_body,
-                message='Payment initiated. Subscription will activate on payment confirmation.',
-            )
-        except ConflictError as exc:
-            return fail(message=str(exc), status_code=status.HTTP_409_CONFLICT)
+        return execute_payment_processor(
+            processor,
+            'Payment initiated. Subscription will activate on payment confirmation.',
+        )
 
 
 @renew_schema
@@ -251,6 +252,12 @@ class RenewView(APIView):
                 message=str(exc),
                 status_code=status.HTTP_400_BAD_REQUEST,
             )
+        except Exception as exc:
+            logger.exception('Wallet renewal failed')
+            return fail(
+                message='Payment service temporarily unavailable.',
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
 
     def _handle_direct_renewal(self, request, existing_sub, plan, validated_data):
         """
@@ -276,8 +283,6 @@ class RenewView(APIView):
                 status_code=status.HTTP_400_BAD_REQUEST,
             )
 
-        from payments.services.processor import PaymentProcessor, ConflictError
-
         billing_cycle = validated_data['billing_cycle']
         amount = plan.monthly_price_ngn if billing_cycle == Subscription.BillingCycle.MONTHLY else plan.yearly_price_ngn
         request_params = {
@@ -296,14 +301,10 @@ class RenewView(APIView):
             request_params=request_params,
         )
 
-        try:
-            response_body, response_code = processor.execute()
-            return success(
-                data=response_body,
-                message='Payment initiated. Subscription will renew on payment confirmation.',
-            )
-        except ConflictError as exc:
-            return fail(message=str(exc), status_code=status.HTTP_409_CONFLICT)
+        return execute_payment_processor(
+            processor,
+            'Payment initiated. Subscription will renew on payment confirmation.',
+        )
 
 
 @my_subscription_schema
@@ -396,12 +397,30 @@ class SwitchPlanView(APIView):
                 error={'detail': str(exc)},
                 status_code=status.HTTP_400_BAD_REQUEST,
             )
+        except Exception:
+            logger.exception('Wallet plan switch failed')
+            return fail(
+                message='Payment service temporarily unavailable.',
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
 
     def _handle_direct_switch(self, request, plan, validated_data):
         """
         Initiates payment for plan switch.
         Uses PaymentProcessor with SWITCH_PLAN purpose so webhook calls switch_plan.
         """
+        # Validate switch eligibility before payment
+        can_switch, error_message = SubscriptionService.can_switch_plan(
+            user=request.user,
+            new_plan_id=str(plan.id)
+        )
+        if not can_switch:
+            return fail(
+                message=error_message,
+                error={'detail': error_message},
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
+
         billing_cycle = validated_data['billing_cycle']
 
         idempotency_key = request.headers.get('X-Idempotency-Key')
@@ -410,9 +429,6 @@ class SwitchPlanView(APIView):
                 message='X-Idempotency-Key header is required for direct payments.',
                 status_code=status.HTTP_400_BAD_REQUEST,
             )
-
-        from payments.services.processor import PaymentProcessor, ConflictError
-        from payments.constants import PaymentPurpose
 
         amount = plan.monthly_price_ngn if billing_cycle == Subscription.BillingCycle.MONTHLY else plan.yearly_price_ngn
         request_params = {
@@ -430,11 +446,7 @@ class SwitchPlanView(APIView):
             request_params=request_params,
         )
 
-        try:
-            response_body, response_code = processor.execute()
-            return success(
-                data=response_body,
-                message='Payment initiated. Plan will switch on payment confirmation.',
-            )
-        except ConflictError as exc:
-            return fail(message=str(exc), status_code=status.HTTP_409_CONFLICT)
+        return execute_payment_processor(
+            processor,
+            'Payment initiated. Plan will switch on payment confirmation.',
+        )
