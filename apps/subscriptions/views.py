@@ -372,6 +372,18 @@ class SwitchPlanView(APIView):
         return self._handle_direct_switch(request, plan, serializer.validated_data)
 
     def _handle_wallet_switch(self, user, new_plan, billing_cycle):
+        # Validate switch eligibility before payment
+        can_switch, error_message = SubscriptionService.can_switch_plan(
+            user=user,
+            new_plan_id=str(new_plan.id)
+        )
+        if not can_switch:
+            return fail(
+                message=error_message,
+                error={'detail': error_message},
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
+
         # Get current subscription (old plan) before switching
         from .models import Subscription
         old_subscription = Subscription.objects.filter(
@@ -409,6 +421,18 @@ class SwitchPlanView(APIView):
         Initiates payment for plan switch.
         Uses PaymentProcessor with SWITCH_PLAN purpose so webhook calls switch_plan.
         """
+        # Validate switch eligibility before payment
+        can_switch, error_message = SubscriptionService.can_switch_plan(
+            user=request.user,
+            new_plan_id=str(plan.id)
+        )
+        if not can_switch:
+            return fail(
+                message=error_message,
+                error={'detail': error_message},
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
+
         billing_cycle = validated_data['billing_cycle']
 
         idempotency_key = request.headers.get('X-Idempotency-Key')
