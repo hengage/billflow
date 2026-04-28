@@ -26,9 +26,9 @@ from .api_schema import (
     switch_plan_schema,
 )
 from .constants import (
-    PLANS_LIST_CACHE_KEY,
     PLANS_LIST_CACHE_TTL,
     PaymentMethod,
+    get_plans_list_cache_key,
 )
 
 logger = logging.getLogger(__name__)
@@ -48,7 +48,7 @@ class PlanListView(APIView):
         currency = request.query_params.get('currency', Currency.NGN).upper()
 
         # Cache key includes currency so NGN and USD lists are cached separately
-        cache_key = f'{PLANS_LIST_CACHE_KEY}_{currency}'
+        cache_key = get_plans_list_cache_key(currency)
         cached = cache.get(cache_key)
 
         if cached:
