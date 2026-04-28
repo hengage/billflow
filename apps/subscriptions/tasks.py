@@ -28,7 +28,7 @@ def dispatch_subscription_expiries(batch_size=500):
     expired_ids = list(Subscription.objects.filter(
         status=Subscription.Status.ACTIVE,
         end_date_utc__lte=now
-    ).values_list('id', flat=True)[:batch_size])
+    ).order_by('end_date_utc').values_list('id', flat=True)[:batch_size])
 
     count = len(expired_ids)
     if count == 0:
