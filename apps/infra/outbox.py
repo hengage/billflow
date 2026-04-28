@@ -177,7 +177,16 @@ class OutboxDrainer:
             # Process batch
             processed = self._process_batch(batch)
             total_processed += processed
-            
+
+            # Break if full batch has zero successful enqueues to avoid tight retry loop
+            # (e.g., during broker outage where all entries stay pending)
+            if len(batch) == self.batch_size and processed == 0:
+                logger.warning(
+                    f'[{self.domain}] Full batch with zero successful enqueues. '
+                    f'Breaking to avoid tight retry loop.'
+                )
+                break
+
             # Continue until we get a partial batch (end of queue)
             if len(batch) < self.batch_size:
                 break
