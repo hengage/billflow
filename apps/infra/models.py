@@ -53,6 +53,7 @@ class Outbox(models.Model):
     # Timestamps
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
     updated_at = models.DateTimeField(auto_now=True)
+    last_drained_at = models.DateTimeField(null=True, blank=True)
     sent_at = models.DateTimeField(null=True, blank=True)
     
     # Error tracking (for audit, not for retry logic)
@@ -62,6 +63,7 @@ class Outbox(models.Model):
         indexes = [
             models.Index(fields=['domain', 'status', 'id']),
             models.Index(fields=['status', 'created_at']),
+            models.Index(fields=['status', 'last_drained_at']),
             models.Index(fields=['status', 'updated_at']),
         ]
         ordering = ['id']

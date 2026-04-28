@@ -251,10 +251,11 @@ class OutboxDrainer:
         
         # Mark successful enqueues as drained (queued to Celery)
         if len(successfully_enqueued) > 0:
+            drained_at = timezone.now()
             with transaction.atomic():
                 Outbox.objects.filter(id__in=successfully_enqueued).update(
                     status=Outbox.Status.DRAINED,
-                    sent_at=timezone.now()
+                    last_drained_at=drained_at
                 )
         
         # Mark failed enqueues with error (stay pending for next poll)
@@ -293,14 +294,14 @@ def recover_stale_entries(domain: str, stale_threshold_minutes: int = 30) -> dic
     stale_entries = Outbox.objects.filter(
         domain=domain,
         status=Outbox.Status.DRAINED,
-        updated_at__lt=stale_threshold
-    ).order_by('updated_at')
+        last_drained_at__lt=stale_threshold
+    ).order_by('last_drained_at')
     
     count = stale_entries.count()
     oldest = stale_entries.first()
     
     if count > 0 and oldest:
-        oldest_age = (timezone.now() - oldest.updated_at).total_seconds() / 60
+        oldest_age = (timezone.now() - oldest.last_drained_at).total_seconds() / 60
         logger.warning(
             f'[{domain}] Found {count} stale drained entries | '
             f'oldest={oldest_age:.1f}min ago | '

@@ -1,6 +1,7 @@
 from celery import shared_task
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.utils import timezone
 
 from apps.infra.outbox import OutboxDrainer, recover_stale_entries
 from apps.infra.models import Outbox
@@ -90,7 +91,10 @@ def send_notification_from_outbox(self, outbox_id, user_id, email, notification_
         )
         
         # Successfully delivered - mark as sent
-        Outbox.objects.filter(id=outbox_id).update(status=Outbox.Status.SENT)
+        Outbox.objects.filter(id=outbox_id).update(
+            status=Outbox.Status.SENT,
+            sent_at=timezone.now(),
+        )
         
         return {'status': 'sent', 'outbox_id': outbox_id}
         
@@ -100,7 +104,7 @@ def send_notification_from_outbox(self, outbox_id, user_id, email, notification_
             error_msg = f'{type(exc).__name__}: {str(exc)}'[:500]
             Outbox.objects.filter(id=outbox_id).update(
                 status=Outbox.Status.FAILED,
-                last_error=error_msg
+                last_error=error_msg,
             )
             return {'status': 'failed', 'outbox_id': outbox_id}
         
