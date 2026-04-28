@@ -17,14 +17,14 @@ logger = logging.getLogger(__name__)
 @shared_task(name=settings.TASK_SUBSCRIPTION_DISPATCH_EXPIRIES)
 def dispatch_subscription_expiries():
     """
-    Finds ACTIVE subscriptions past their end_date and fans them out to workers.
+    Finds ACTIVE subscriptions past their end_date_utc and fans them out to workers.
     """
     now = timezone.now()
 
     # Only select the ID to keep the initial query extremely light
     expired_ids = Subscription.objects.filter(
         status=Subscription.Status.ACTIVE,
-        end_date__lte=now
+        end_date_utc__lte=now
     ).values_list('id', flat=True).iterator()
 
     count = 0
