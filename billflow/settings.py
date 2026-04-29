@@ -296,7 +296,7 @@ PASSWORD_RESET_CONFIRM_URL = config('PASSWORD_RESET_CONFIRM_URL')
 SPECTACULAR_SETTINGS = {
     'TITLE': 'BillFlow API',
     'DESCRIPTION': (
-        'A multi-tenant bill payment, wallet and subscription API. '
+        'A bill payment, wallet and subscription API. '
         'Built with Django REST Framework, Paystack, Stripe, and Django Channels.'
     ),
     'VERSION': '1.0.0',
